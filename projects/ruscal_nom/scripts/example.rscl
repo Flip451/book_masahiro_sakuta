@@ -14,3 +14,6 @@ tan(pi / 4);
 pow(2, 3);
 log(10, 100);
 sqrt(16);
+let a = 1;
+let b = 2;
+a + b;

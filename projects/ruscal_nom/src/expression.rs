@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use nom::{
     branch::alt,
     bytes::complete::tag,
@@ -12,16 +14,19 @@ use nom::{
     IResult,
 };
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Ident<'src>(&'src str);
+
 #[derive(Clone, Debug)]
 pub enum Token<'src> {
-    Ident(&'src str),
+    Ident(Ident<'src>),
     Number(f64),
 }
 
 #[derive(Clone, Debug)]
 pub enum Expression<'src> {
     Value(Token<'src>),
-    FnInvoke(Token<'src>, Vec<Expression<'src>>),
+    FnInvoke(Ident<'src>, Vec<Expression<'src>>),
     Add(Box<Expression<'src>>, Box<Expression<'src>>),
     Sub(Box<Expression<'src>>, Box<Expression<'src>>),
     Mul(Box<Expression<'src>>, Box<Expression<'src>>),
@@ -31,57 +36,55 @@ pub enum Expression<'src> {
 }
 
 impl<'src> Expression<'src> {
-    pub fn eval(&self) -> f64 {
+    pub fn eval(&self, variables: &HashMap<Ident<'src>, f64>) -> f64 {
         match self {
             Expression::Value(Token::Number(n)) => *n,
-            Expression::Value(Token::Ident("pi")) => std::f64::consts::PI,
-            Expression::Value(Token::Ident(_)) => todo!(),
-            Expression::Add(lhs, rhs) => lhs.eval() + rhs.eval(),
-            Expression::Sub(lhs, rhs) => lhs.eval() - rhs.eval(),
-            Expression::Mul(lhs, rhs) => lhs.eval() * rhs.eval(),
-            Expression::Div(lhs, rhs) => lhs.eval() / rhs.eval(),
-            Expression::Rem(lhs, rhs) => lhs.eval() % rhs.eval(),
-            Expression::FnInvoke(Token::Ident("sqrt"), args) => unary_fn(f64::sqrt)(args),
-            Expression::FnInvoke(Token::Ident("sin"), args) => unary_fn(f64::sin)(args),
-            Expression::FnInvoke(Token::Ident("cos"), args) => unary_fn(f64::cos)(args),
-            Expression::FnInvoke(Token::Ident("tan"), args) => unary_fn(f64::tan)(args),
-            Expression::FnInvoke(Token::Ident("asin"), args) => unary_fn(f64::asin)(args),
-            Expression::FnInvoke(Token::Ident("acos"), args) => unary_fn(f64::acos)(args),
-            Expression::FnInvoke(Token::Ident("atan"), args) => unary_fn(f64::atan)(args),
-            Expression::FnInvoke(Token::Ident("atan2"), args) => binary_fn(f64::atan2)(args),
-            Expression::FnInvoke(Token::Ident("pow"), args) => binary_fn(f64::powf)(args),
-            Expression::FnInvoke(Token::Ident("exp"), args) => unary_fn(f64::exp)(args),
-            Expression::FnInvoke(Token::Ident("ln"), args) => unary_fn(f64::ln)(args),
-            Expression::FnInvoke(Token::Ident("log10"), args) => unary_fn(f64::log10)(args),
-            Expression::FnInvoke(Token::Ident("log2"), args) => unary_fn(f64::log2)(args),
-            Expression::FnInvoke(Token::Ident("log"), args) => binary_fn(f64::log)(args),
-            Expression::FnInvoke(Token::Ident(name), _) => {
+            Expression::Value(Token::Ident(Ident("pi"))) => std::f64::consts::PI,
+            Expression::Value(Token::Ident(var)) => *variables.get(var).expect("variable not found"),
+            Expression::Add(lhs, rhs) => lhs.eval(variables) + rhs.eval(variables),
+            Expression::Sub(lhs, rhs) => lhs.eval(variables) - rhs.eval(variables),
+            Expression::Mul(lhs, rhs) => lhs.eval(variables) * rhs.eval(variables),
+            Expression::Div(lhs, rhs) => lhs.eval(variables) / rhs.eval(variables),
+            Expression::Rem(lhs, rhs) => lhs.eval(variables) % rhs.eval(variables),
+            // Expression::Pow(lhs, rhs) => lhs.eval().powf(rhs.eval()),
+            Expression::FnInvoke(Ident("sqrt"), args) => unary_fn(f64::sqrt)(args, variables),
+            Expression::FnInvoke(Ident("sin"), args) => unary_fn(f64::sin)(args, variables),
+            Expression::FnInvoke(Ident("cos"), args) => unary_fn(f64::cos)(args, variables),
+            Expression::FnInvoke(Ident("tan"), args) => unary_fn(f64::tan)(args, variables),
+            Expression::FnInvoke(Ident("asin"), args) => unary_fn(f64::asin)(args, variables),
+            Expression::FnInvoke(Ident("acos"), args) => unary_fn(f64::acos)(args, variables),
+            Expression::FnInvoke(Ident("atan"), args) => unary_fn(f64::atan)(args, variables),
+            Expression::FnInvoke(Ident("atan2"), args) => binary_fn(f64::atan2)(args, variables),
+            Expression::FnInvoke(Ident("pow"), args) => binary_fn(f64::powf)(args, variables),
+            Expression::FnInvoke(Ident("exp"), args) => unary_fn(f64::exp)(args, variables),
+            Expression::FnInvoke(Ident("ln"), args) => unary_fn(f64::ln)(args, variables),
+            Expression::FnInvoke(Ident("log10"), args) => unary_fn(f64::log10)(args, variables),
+            Expression::FnInvoke(Ident("log2"), args) => unary_fn(f64::log2)(args, variables),
+            Expression::FnInvoke(Ident("log"), args) => binary_fn(f64::log)(args, variables),
+            Expression::FnInvoke(Ident(name), _) => {
                 panic!("Function call to {:?} is not implemented", name)
             }
-            Expression::FnInvoke(Token::Number(_), _) => {
-                panic!("Function call with number is not allowed")
-            } // Expression::Pow(lhs, rhs) => lhs.eval().powf(rhs.eval()),
         }
     }
 }
 
 // 単項関数を式の配列に対する関数に変換する関数
-fn unary_fn(f: impl Fn(f64) -> f64) -> impl Fn(&Vec<Expression>) -> f64 {
-    move |args| {
+fn unary_fn<'src>(f: impl Fn(f64) -> f64) -> impl Fn(&Vec<Expression>, &HashMap<Ident<'src>, f64>) -> f64 {
+    move |args, variables| {
         let arg = args.first().expect("function missing argument");
-        let arg = arg.eval();
+        let arg = arg.eval(variables);
         f(arg)
     }
 }
 
 // 二項関数を式の配列に対する関数に変換する関数
-fn binary_fn(f: impl Fn(f64, f64) -> f64) -> impl Fn(&Vec<Expression>) -> f64 {
-    move |args| {
+fn binary_fn<'src>(f: impl Fn(f64, f64) -> f64) -> impl Fn(&Vec<Expression>, &HashMap<Ident<'src>, f64>) -> f64 {
+    move |args , variables| {
         let first_arg = args.first().expect("function missing the first argument");
-        let first_arg = first_arg.eval();
+        let first_arg = first_arg.eval(variables);
 
         let second_arg = args.get(1).expect("function missing the second argument");
-        let second_arg = second_arg.eval();
+        let second_arg = second_arg.eval(variables);
 
         f(first_arg, second_arg)
     }
@@ -108,7 +111,7 @@ fn number<'src>(input: &'src str) -> IResult<&'src str, Token<'src>> {
 }
 
 // 識別子をパースする
-fn ident<'src>(input: &'src str) -> IResult<&'src str, Token<'src>> {
+pub(crate) fn ident<'src>(input: &'src str) -> IResult<&'src str, Ident<'src>> {
     let (input, ident) = delimited(
         multispace0,
         recognize(pair(
@@ -117,12 +120,17 @@ fn ident<'src>(input: &'src str) -> IResult<&'src str, Token<'src>> {
         )),
         multispace0,
     )(input)?;
+    Ok((input, Ident(ident)))
+}
+
+fn ident_token<'src>(input: &'src str) -> IResult<&'src str, Token<'src>> {
+    let (input, ident) = ident(input)?;
     Ok((input, Token::Ident(ident)))
 }
 
 // 値をパースする
 fn value<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
-    let (input, token) = alt((number, ident))(input)?;
+    let (input, token) = alt((number, ident_token))(input)?;
     Ok((input, Expression::Value(token)))
 }
 
