@@ -44,5 +44,26 @@ fn main() -> Result<(), Box<dyn Error>> {
         expression::expr(input)?.1.eval()
     );
 
+    let input = "sqrt(2) / 2";
+    println!(
+        "source: {:?}, parsed: {:?}",
+        input,
+        expression::expr(input)?.1.eval()
+    );
+
+    let input = "sin(pi / 4)";
+    println!(
+        "source: {:?}, parsed: {:?}",
+        input,
+        expression::expr(input)?.1.eval()
+    );
+
+    let input = "atan2(1, 1)";
+    println!(
+        "source: {:?}, parsed: {:?}",
+        input,
+        expression::expr(input)?.1.eval()
+    );
+
     Ok(())
 }

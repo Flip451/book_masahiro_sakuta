@@ -1,8 +1,11 @@
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::{alpha1, alphanumeric1, multispace0},
-    combinator::recognize,
+    character::{
+        complete::{alpha1, alphanumeric1, multispace0},
+        streaming::space0,
+    },
+    combinator::{opt, recognize},
     multi::{fold_many0, many0},
     number::complete::double,
     sequence::{delimited, pair},
@@ -18,12 +21,13 @@ pub enum Token<'src> {
 #[derive(Clone, Debug)]
 pub enum Expression<'src> {
     Value(Token<'src>),
+    FnInvoke(Token<'src>, Vec<Expression<'src>>),
     Add(Box<Expression<'src>>, Box<Expression<'src>>),
     Sub(Box<Expression<'src>>, Box<Expression<'src>>),
     Mul(Box<Expression<'src>>, Box<Expression<'src>>),
     Div(Box<Expression<'src>>, Box<Expression<'src>>),
     Rem(Box<Expression<'src>>, Box<Expression<'src>>),
-    Pow(Box<Expression<'src>>, Box<Expression<'src>>),
+    // Pow(Box<Expression<'src>>, Box<Expression<'src>>),
 }
 
 impl<'src> Expression<'src> {
@@ -37,14 +41,55 @@ impl<'src> Expression<'src> {
             Expression::Mul(lhs, rhs) => lhs.eval() * rhs.eval(),
             Expression::Div(lhs, rhs) => lhs.eval() / rhs.eval(),
             Expression::Rem(lhs, rhs) => lhs.eval() % rhs.eval(),
-            Expression::Pow(lhs, rhs) => lhs.eval().powf(rhs.eval()),
+            Expression::FnInvoke(Token::Ident("sqrt"), args) => unary_fn(f64::sqrt)(args),
+            Expression::FnInvoke(Token::Ident("sin"), args) => unary_fn(f64::sin)(args),
+            Expression::FnInvoke(Token::Ident("cos"), args) => unary_fn(f64::cos)(args),
+            Expression::FnInvoke(Token::Ident("tan"), args) => unary_fn(f64::tan)(args),
+            Expression::FnInvoke(Token::Ident("asin"), args) => unary_fn(f64::asin)(args),
+            Expression::FnInvoke(Token::Ident("acos"), args) => unary_fn(f64::acos)(args),
+            Expression::FnInvoke(Token::Ident("atan"), args) => unary_fn(f64::atan)(args),
+            Expression::FnInvoke(Token::Ident("atan2"), args) => binary_fn(f64::atan2)(args),
+            Expression::FnInvoke(Token::Ident("pow"), args) => binary_fn(f64::powf)(args),
+            Expression::FnInvoke(Token::Ident("exp"), args) => unary_fn(f64::exp)(args),
+            Expression::FnInvoke(Token::Ident("ln"), args) => unary_fn(f64::ln)(args),
+            Expression::FnInvoke(Token::Ident("log10"), args) => unary_fn(f64::log10)(args),
+            Expression::FnInvoke(Token::Ident("log2"), args) => unary_fn(f64::log2)(args),
+            Expression::FnInvoke(Token::Ident("log"), args) => binary_fn(f64::log)(args),
+            Expression::FnInvoke(Token::Ident(name), _) => {
+                panic!("Function call to {:?} is not implemented", name)
+            }
+            Expression::FnInvoke(Token::Number(_), _) => {
+                panic!("Function call with number is not allowed")
+            } // Expression::Pow(lhs, rhs) => lhs.eval().powf(rhs.eval()),
         }
     }
 }
 
-// 因子は数値リテラル または 識別子 または () で囲まれた式 のいずれかである
+// 単項関数を式の配列に対する関数に変換する関数
+fn unary_fn(f: impl Fn(f64) -> f64) -> impl Fn(&Vec<Expression>) -> f64 {
+    move |args| {
+        let arg = args.first().expect("function missing argument");
+        let arg = arg.eval();
+        f(arg)
+    }
+}
+
+// 二項関数を式の配列に対する関数に変換する関数
+fn binary_fn(f: impl Fn(f64, f64) -> f64) -> impl Fn(&Vec<Expression>) -> f64 {
+    move |args| {
+        let first_arg = args.first().expect("function missing the first argument");
+        let first_arg = first_arg.eval();
+
+        let second_arg = args.get(1).expect("function missing the second argument");
+        let second_arg = second_arg.eval();
+
+        f(first_arg, second_arg)
+    }
+}
+
+// 因子は数値リテラル または 識別子 または () で囲まれた式、関数呼び出し のいずれかである
 fn factor<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
-    alt((number, ident, parens))(input)
+    alt((function_call, value, parens))(input)
 }
 
 // () で囲まれた式をパースする
@@ -57,13 +102,13 @@ fn parens<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
 }
 
 // 数値をパースする
-fn number<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
+fn number<'src>(input: &'src str) -> IResult<&'src str, Token<'src>> {
     let (input, float) = delimited(multispace0, double, multispace0)(input)?;
-    Ok((input, Expression::Value(Token::Number(float))))
+    Ok((input, Token::Number(float)))
 }
 
 // 識別子をパースする
-fn ident<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
+fn ident<'src>(input: &'src str) -> IResult<&'src str, Token<'src>> {
     let (input, ident) = delimited(
         multispace0,
         recognize(pair(
@@ -72,10 +117,16 @@ fn ident<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
         )),
         multispace0,
     )(input)?;
-    Ok((input, Expression::Value(Token::Ident(ident))))
+    Ok((input, Token::Ident(ident)))
 }
 
-// 加算式をパースする
+// 値をパースする
+fn value<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
+    let (input, token) = alt((number, ident))(input)?;
+    Ok((input, Expression::Value(token)))
+}
+
+// 式（加算式）をパースする
 pub fn expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
     let (input, lhs) = term(input)?;
 
@@ -93,7 +144,7 @@ pub fn expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
     )(input)
 }
 
-// 乗算式をパースする
+// 項（乗算式）をパースする
 fn term<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
     let (input, lhs) = factor(input)?;
 
@@ -101,7 +152,7 @@ fn term<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
         pair(
             delimited(
                 multispace0,
-                alt((tag("*"), tag("/"), tag("%"), tag("^"))),
+                alt((tag("*"), tag("/"), tag("%") /*, tag("^")*/)),
                 multispace0,
             ),
             factor,
@@ -111,8 +162,29 @@ fn term<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
             "*" => Expression::Mul(Box::new(lhs), Box::new(rhs)),
             "/" => Expression::Div(Box::new(lhs), Box::new(rhs)),
             "%" => Expression::Rem(Box::new(lhs), Box::new(rhs)),
-            "^" => Expression::Pow(Box::new(lhs), Box::new(rhs)),
+            // "^" => Expression::Pow(Box::new(lhs), Box::new(rhs)),
             _ => unreachable!("invalid multiplicative operator"),
         },
     )(input)
+}
+
+// 関数呼び出しをパースする
+fn function_call<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
+    let (input, ident) = ident(input)?;
+
+    let (input, args) = delimited(
+        multispace0,
+        delimited(
+            tag("("),
+            many0(delimited(
+                space0,
+                expr,
+                delimited(multispace0, opt(tag(",")), multispace0),
+            )),
+            tag(")"),
+        ),
+        multispace0,
+    )(input)?;
+
+    Ok((input, Expression::FnInvoke(ident, args)))
 }
