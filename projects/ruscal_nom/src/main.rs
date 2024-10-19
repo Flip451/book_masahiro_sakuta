@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap, error::Error, io::{self, Read}
+    collections::{hash_map::Entry, HashMap}, error::Error, io::{self, Read}
 };
 
 use ruscal_nom::statement::{self, Statement};
@@ -14,10 +14,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         Ok(statements) => {
             for statement in statements {
                 match statement {
-                    Statement::LetDef(name, expr) => {
-                        println!("{:?} = {:?}", name, expr);
-                        variables.insert(name, expr.eval(&variables));
+                    Statement::VarDef(ident, expr) => {
+                        println!("{:?} = {:?}", ident, expr);
+                        variables.insert(ident, expr.eval(&variables));
                     }
+                    Statement::Assignment(ident, expression) => {
+                        println!("{:?} = {:?}", ident, expression);
+                        if !variables.contains_key(&ident) {
+                            panic!("Error: {:?} is not defined", ident);
+                        }
+                        variables.insert(ident, expression.eval(&variables));
+                    },
                     Statement::Expression(expr) => {
                         println!("{}", expr.eval(&variables));
                     }
