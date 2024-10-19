@@ -1,69 +1,22 @@
-use ruscal_nom::expression;
-use std::error::Error;
+use std::{
+    error::Error,
+    io::{self, Read},
+};
+
+use ruscal_nom::statement;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let input = "123";
-    println!(
-        "source: {:?}, parsed: {:?}",
-        input,
-        expression::expr(input)?.1.eval()
-    );
-
-    let input = "2 * pi";
-    println!(
-        "source: {:?}, parsed: {:?}",
-        input,
-        expression::expr(input)?.1.eval()
-    );
-
-    let input = "(123 + 456 ) + pi";
-    println!(
-        "source: {:?}, parsed: {:?}",
-        input,
-        expression::expr(input)?.1.eval()
-    );
-
-    let input = "10 - (100 + 1)";
-    println!(
-        "source: {:?}, parsed: {:?}",
-        input,
-        expression::expr(input)?.1.eval()
-    );
-
-    let input = "(3 + 7) / (2 + 3)";
-    println!(
-        "source: {:?}, parsed: {:?}",
-        input,
-        expression::expr(input)?.1.eval()
-    );
-
-    let input = "(21.5 % 7) ^ 2";
-    println!(
-        "source: {:?}, parsed: {:?}",
-        input,
-        expression::expr(input)?.1.eval()
-    );
-
-    let input = "sqrt(2) / 2";
-    println!(
-        "source: {:?}, parsed: {:?}",
-        input,
-        expression::expr(input)?.1.eval()
-    );
-
-    let input = "sin(pi / 4)";
-    println!(
-        "source: {:?}, parsed: {:?}",
-        input,
-        expression::expr(input)?.1.eval()
-    );
-
-    let input = "atan2(1, 1)";
-    println!(
-        "source: {:?}, parsed: {:?}",
-        input,
-        expression::expr(input)?.1.eval()
-    );
-
+    let mut input = String::new();
+    io::stdin().read_to_string(&mut input)?;
+    match statement::statements(&input) {
+        Ok(statements) => {
+            for statement in statements {
+                println!("{:?}", statement.eval());
+            }
+        }
+        Err(e) => {
+            eprintln!("Error: {}", e);
+        }
+    }
     Ok(())
 }
