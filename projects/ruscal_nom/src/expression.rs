@@ -10,7 +10,7 @@ use nom::{
     combinator::{opt, recognize},
     multi::{fold_many0, many0},
     number::complete::double,
-    sequence::{delimited, pair},
+    sequence::{delimited, pair, preceded},
     IResult,
 };
 
@@ -27,6 +27,11 @@ pub enum Token<'src> {
 pub enum Expression<'src> {
     Value(Token<'src>),
     FnInvoke(Ident<'src>, Vec<Expression<'src>>),
+    If(
+        Box<Expression<'src>>,
+        Box<Expression<'src>>,
+        Option<Box<Expression<'src>>>,
+    ),
     Add(Box<Expression<'src>>, Box<Expression<'src>>),
     Sub(Box<Expression<'src>>, Box<Expression<'src>>),
     Mul(Box<Expression<'src>>, Box<Expression<'src>>),
@@ -40,7 +45,18 @@ impl<'src> Expression<'src> {
         match self {
             Expression::Value(Token::Number(n)) => *n,
             Expression::Value(Token::Ident(Ident("pi"))) => std::f64::consts::PI,
-            Expression::Value(Token::Ident(var)) => *variables.get(var).expect("variable not found"),
+            Expression::Value(Token::Ident(var)) => *variables
+                .get(var)
+                .expect(&format!("variable {:?} not found", var)),
+            Expression::If(cond, then, otherwise) => {
+                if cond.eval(variables) != 0.0 {
+                    then.eval(variables)
+                } else if let Some(otherwise) = otherwise {
+                    otherwise.eval(variables)
+                } else {
+                    0.0
+                }
+            }
             Expression::Add(lhs, rhs) => lhs.eval(variables) + rhs.eval(variables),
             Expression::Sub(lhs, rhs) => lhs.eval(variables) - rhs.eval(variables),
             Expression::Mul(lhs, rhs) => lhs.eval(variables) * rhs.eval(variables),
@@ -69,7 +85,9 @@ impl<'src> Expression<'src> {
 }
 
 // 単項関数を式の配列に対する関数に変換する関数
-fn unary_fn<'src>(f: impl Fn(f64) -> f64) -> impl Fn(&Vec<Expression>, &HashMap<Ident<'src>, f64>) -> f64 {
+fn unary_fn<'src>(
+    f: impl Fn(f64) -> f64,
+) -> impl Fn(&Vec<Expression>, &HashMap<Ident<'src>, f64>) -> f64 {
     move |args, variables| {
         let arg = args.first().expect("function missing argument");
         let arg = arg.eval(variables);
@@ -78,8 +96,10 @@ fn unary_fn<'src>(f: impl Fn(f64) -> f64) -> impl Fn(&Vec<Expression>, &HashMap<
 }
 
 // 二項関数を式の配列に対する関数に変換する関数
-fn binary_fn<'src>(f: impl Fn(f64, f64) -> f64) -> impl Fn(&Vec<Expression>, &HashMap<Ident<'src>, f64>) -> f64 {
-    move |args , variables| {
+fn binary_fn<'src>(
+    f: impl Fn(f64, f64) -> f64,
+) -> impl Fn(&Vec<Expression>, &HashMap<Ident<'src>, f64>) -> f64 {
+    move |args, variables| {
         let first_arg = args.first().expect("function missing the first argument");
         let first_arg = first_arg.eval(variables);
 
@@ -89,6 +109,19 @@ fn binary_fn<'src>(f: impl Fn(f64, f64) -> f64) -> impl Fn(&Vec<Expression>, &Ha
         f(first_arg, second_arg)
     }
 }
+
+// 要素の左右の空白と改行を無視するための高階関数
+// fn space_delimited<'src, F, O, E>(f: F) -> impl FnMut(&'src str) -> IResult<&'src str, O, E>
+// where
+//     F: Parser<&'src str, O, E>,
+//     E: ParseError<&'src str>,
+// {
+//     delimited(
+//         many0(alt((space1, line_ending))),
+//         f,
+//         many0(alt((space1, line_ending))),
+//     )
+// }
 
 // 因子は数値リテラル または 識別子 または () で囲まれた式、関数呼び出し のいずれかである
 fn factor<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
@@ -134,8 +167,38 @@ fn value<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
     Ok((input, Expression::Value(token)))
 }
 
-// 式（加算式）をパースする
 pub fn expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
+    alt((if_expr, num_expr))(input)
+}
+
+fn open_brace<'src>(input: &'src str) -> IResult<&'src str, ()> {
+    let (input, _) = delimited(multispace0, tag("{"), multispace0)(input)?;
+    Ok((input, ()))
+}
+
+fn close_brace<'src>(input: &'src str) -> IResult<&'src str, ()> {
+    let (input, _) = delimited(multispace0, tag("}"), multispace0)(input)?;
+    Ok((input, ()))
+}
+
+fn if_expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
+    let (input, _) = delimited(multispace0, tag("if"), multispace0)(input)?;
+    let (input, cond) = expr(input)?;
+    let (input, _) = open_brace(input)?;
+    let (input, then) = expr(input)?;
+    let (input, _) = close_brace(input)?;
+    let (input, otherwise) = opt(preceded(
+        delimited(multispace0, tag("else"), multispace0),
+        delimited(open_brace, expr, close_brace),
+    ))(input)?;
+    Ok((
+        input,
+        Expression::If(Box::new(cond), Box::new(then), otherwise.map(Box::new)),
+    ))
+}
+
+// 式（加算式）をパースする
+fn num_expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
     let (input, lhs) = term(input)?;
 
     fold_many0(

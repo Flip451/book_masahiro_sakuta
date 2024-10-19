@@ -22,3 +22,9 @@ b = 4 ;
 a + b;
 let c = 5;
 pow((a + b + c), 2);
+
+if c {
+    a
+} else {
+    b
+};
