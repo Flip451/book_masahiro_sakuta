@@ -1,8 +1,10 @@
 use std::{
-    collections::{hash_map::Entry, HashMap}, error::Error, io::{self, Read}
+    collections::HashMap,
+    error::Error,
+    io::{self, Read},
 };
 
-use ruscal_nom::statement::{self, Statement};
+use ruscal_nom::statement::Statements;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut input = String::new();
@@ -10,26 +12,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut variables = HashMap::new();
 
-    match statement::statements(&input) {
-        Ok(statements) => {
-            for statement in statements {
-                match statement {
-                    Statement::VarDef(ident, expr) => {
-                        println!("{:?} = {:?}", ident, expr);
-                        variables.insert(ident, expr.eval(&variables));
-                    }
-                    Statement::Assignment(ident, expression) => {
-                        println!("{:?} = {:?}", ident, expression);
-                        if !variables.contains_key(&ident) {
-                            panic!("Error: {:?} is not defined", ident);
-                        }
-                        variables.insert(ident, expression.eval(&variables));
-                    },
-                    Statement::Expression(expr) => {
-                        println!("{}", expr.eval(&variables));
-                    }
-                }
-            }
+    match Statements::parse(&input) {
+        Ok((_, statements)) => {
+            statements.eval(&mut variables)?;
         }
         Err(e) => {
             eprintln!("Error: {}", e);

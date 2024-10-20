@@ -14,7 +14,9 @@ use nom::{
     IResult,
 };
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+use crate::statement;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Ident<'src>(&'src str);
 
 #[derive(Clone, Debug)]
@@ -50,9 +52,9 @@ impl<'src> Expression<'src> {
                 .expect(&format!("variable {:?} not found", var)),
             Expression::If(cond, then, otherwise) => {
                 if cond.eval(variables) != 0.0 {
-                    then.eval(variables)
+                    then.eval(&variables)
                 } else if let Some(otherwise) = otherwise {
-                    otherwise.eval(variables)
+                    otherwise.eval(&variables)
                 } else {
                     0.0
                 }
@@ -171,25 +173,15 @@ pub fn expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
     alt((if_expr, num_expr))(input)
 }
 
-fn open_brace<'src>(input: &'src str) -> IResult<&'src str, ()> {
-    let (input, _) = delimited(multispace0, tag("{"), multispace0)(input)?;
-    Ok((input, ()))
-}
-
-fn close_brace<'src>(input: &'src str) -> IResult<&'src str, ()> {
-    let (input, _) = delimited(multispace0, tag("}"), multispace0)(input)?;
-    Ok((input, ()))
-}
-
 fn if_expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
     let (input, _) = delimited(multispace0, tag("if"), multispace0)(input)?;
     let (input, cond) = expr(input)?;
-    let (input, _) = open_brace(input)?;
+    let (input, _) = statement::open_brace(input)?;
     let (input, then) = expr(input)?;
-    let (input, _) = close_brace(input)?;
+    let (input, _) = statement::close_brace(input)?;
     let (input, otherwise) = opt(preceded(
         delimited(multispace0, tag("else"), multispace0),
-        delimited(open_brace, expr, close_brace),
+        delimited(statement::open_brace, expr, statement::close_brace),
     ))(input)?;
     Ok((
         input,
