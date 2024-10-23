@@ -1,16 +1,19 @@
-use std::{collections::HashMap, error::Error};
-
 use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::{multispace0, multispace1},
-    multi::many0,
+    multi::{many0, separated_list0},
     sequence::{delimited, terminated},
     IResult,
 };
 
-use crate::expression::{self, Expression, Ident};
+use crate::{
+    expression::{self, Expression, Ident},
+    function::{self, FnDef},
+    stack_frame::StackFrame,
+};
 
+#[derive(Debug, Clone)]
 pub struct Statements<'src>(Vec<Statement<'src>>);
 
 impl<'src> Statements<'src> {
@@ -19,23 +22,23 @@ impl<'src> Statements<'src> {
         Ok((input, Statements(statements)))
     }
 
-    pub fn eval(&self, variables: &mut HashMap<Ident<'src>, f64>) -> Result<(), Box<dyn Error>> {
+    pub fn eval(&'src self, stack_frame: &mut StackFrame<'src>) -> f64 {
+        let mut result = 0.;
         for statement in self.0.iter() {
             match statement {
-                Statement::VarDef(ref ident, expr) => {
-                    println!("{:?} = {:?}", ident, expr);
-                    let value = expr.eval(variables);
-                    variables.insert(*ident, value);
+                Statement::VarDef(ident, expr) => {
+                    let value = expr.eval(stack_frame);
+                    stack_frame.insert_variable(*ident, value);
                 }
                 Statement::Assignment(ident, expression) => {
-                    println!("{:?} = {:?}", ident, expression);
-                    if !variables.contains_key(&ident) {
+                    if stack_frame.get_variable(*ident).is_none() {
                         panic!("Error: {:?} is not defined", ident);
                     }
-                    variables.insert(*ident, expression.eval(variables));
+                    let value = expression.eval(stack_frame);
+                    stack_frame.insert_variable(*ident, value);
                 }
                 Statement::Expression(expr) => {
-                    println!("{}", expr.eval(&variables));
+                    result = expr.eval(stack_frame);
                 }
                 Statement::For {
                     loop_var,
@@ -43,19 +46,24 @@ impl<'src> Statements<'src> {
                     end,
                     body,
                 } => {
-                    let start = start.eval(variables) as isize;
-                    let end = end.eval(variables) as isize;
+                    let start = start.eval(stack_frame) as isize;
+                    let end = end.eval(stack_frame) as isize;
                     for i in start..end {
-                        variables.insert(*loop_var, i as f64);
-                        body.eval(variables)?;
+                        stack_frame.insert_variable(*loop_var, i as f64);
+                        body.eval(stack_frame);
                     }
+                }
+                Statement::FnDef { name, args, body } => {
+                    let fn_def = FnDef::User(function::UserFn::new(&args[..], &body));
+                    stack_frame.insert_function(*name, fn_def);
                 }
             }
         }
-        Ok(())
+        result
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum Statement<'src> {
     VarDef(Ident<'src>, Expression<'src>),
     Assignment(Ident<'src>, Expression<'src>),
@@ -66,12 +74,18 @@ pub enum Statement<'src> {
         end: Expression<'src>,
         body: Statements<'src>,
     },
+    FnDef {
+        name: Ident<'src>,
+        args: Vec<Ident<'src>>,
+        body: Statements<'src>,
+    },
 }
 
 impl<'src> Statement<'src> {
     pub fn parse(input: &'src str) -> IResult<&'src str, Statement<'src>> {
         let (input, statement) = alt((
             for_statement,
+            fn_def,
             terminated(
                 alt((var_def, assignment, expr_statement)),
                 delimited(multispace0, tag(";"), multispace0),
@@ -79,6 +93,16 @@ impl<'src> Statement<'src> {
         ))(input)?;
         Ok((input, statement))
     }
+}
+
+pub(crate) fn open_brace<'src>(input: &'src str) -> IResult<&'src str, ()> {
+    let (input, _) = delimited(multispace0, tag("{"), multispace0)(input)?;
+    Ok((input, ()))
+}
+
+pub(crate) fn close_brace<'src>(input: &'src str) -> IResult<&'src str, ()> {
+    let (input, _) = delimited(multispace0, tag("}"), multispace0)(input)?;
+    Ok((input, ()))
 }
 
 fn var_def<'src>(input: &'src str) -> IResult<&'src str, Statement<'src>> {
@@ -120,12 +144,18 @@ fn for_statement<'src>(input: &'src str) -> IResult<&'src str, Statement<'src>> 
     ))
 }
 
-pub(crate) fn open_brace<'src>(input: &'src str) -> IResult<&'src str, ()> {
-    let (input, _) = delimited(multispace0, tag("{"), multispace0)(input)?;
-    Ok((input, ()))
-}
-
-pub(crate) fn close_brace<'src>(input: &'src str) -> IResult<&'src str, ()> {
-    let (input, _) = delimited(multispace0, tag("}"), multispace0)(input)?;
-    Ok((input, ()))
+fn fn_def<'src>(input: &'src str) -> IResult<&'src str, Statement<'src>> {
+    let (input, _) = delimited(multispace0, tag("fn"), multispace1)(input)?;
+    let (input, name) = expression::ident(input)?;
+    let (input, args) = delimited(
+        multispace0,
+        delimited(
+            tag("("),
+            separated_list0(tag(","), expression::ident),
+            tag(")"),
+        ),
+        multispace0,
+    )(input)?;
+    let (input, body) = delimited(open_brace, Statements::parse, close_brace)(input)?;
+    Ok((input, Statement::FnDef { name, args, body }))
 }

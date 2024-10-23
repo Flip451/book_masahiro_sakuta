@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use nom::{
     branch::alt,
     bytes::complete::tag,
@@ -14,10 +12,10 @@ use nom::{
     IResult,
 };
 
-use crate::statement;
+use crate::{stack_frame::StackFrame, statement};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct Ident<'src>(&'src str);
+pub struct Ident<'src>(pub(crate) &'src str);
 
 #[derive(Clone, Debug)]
 pub enum Token<'src> {
@@ -43,72 +41,34 @@ pub enum Expression<'src> {
 }
 
 impl<'src> Expression<'src> {
-    pub fn eval(&self, variables: &HashMap<Ident<'src>, f64>) -> f64 {
+    pub fn eval(&'src self, stack_frame: &StackFrame<'src>) -> f64 {
         match self {
             Expression::Value(Token::Number(n)) => *n,
-            Expression::Value(Token::Ident(Ident("pi"))) => std::f64::consts::PI,
-            Expression::Value(Token::Ident(var)) => *variables
-                .get(var)
+            Expression::Value(Token::Ident(var)) => stack_frame
+                .get_variable(*var)
                 .expect(&format!("variable {:?} not found", var)),
             Expression::If(cond, then, otherwise) => {
-                if cond.eval(variables) != 0.0 {
-                    then.eval(&variables)
+                if cond.eval(stack_frame) != 0.0 {
+                    then.eval(stack_frame)
                 } else if let Some(otherwise) = otherwise {
-                    otherwise.eval(&variables)
+                    otherwise.eval(stack_frame)
                 } else {
                     0.0
                 }
             }
-            Expression::Add(lhs, rhs) => lhs.eval(variables) + rhs.eval(variables),
-            Expression::Sub(lhs, rhs) => lhs.eval(variables) - rhs.eval(variables),
-            Expression::Mul(lhs, rhs) => lhs.eval(variables) * rhs.eval(variables),
-            Expression::Div(lhs, rhs) => lhs.eval(variables) / rhs.eval(variables),
-            Expression::Rem(lhs, rhs) => lhs.eval(variables) % rhs.eval(variables),
-            // Expression::Pow(lhs, rhs) => lhs.eval().powf(rhs.eval()),
-            Expression::FnInvoke(Ident("sqrt"), args) => unary_fn(f64::sqrt)(args, variables),
-            Expression::FnInvoke(Ident("sin"), args) => unary_fn(f64::sin)(args, variables),
-            Expression::FnInvoke(Ident("cos"), args) => unary_fn(f64::cos)(args, variables),
-            Expression::FnInvoke(Ident("tan"), args) => unary_fn(f64::tan)(args, variables),
-            Expression::FnInvoke(Ident("asin"), args) => unary_fn(f64::asin)(args, variables),
-            Expression::FnInvoke(Ident("acos"), args) => unary_fn(f64::acos)(args, variables),
-            Expression::FnInvoke(Ident("atan"), args) => unary_fn(f64::atan)(args, variables),
-            Expression::FnInvoke(Ident("atan2"), args) => binary_fn(f64::atan2)(args, variables),
-            Expression::FnInvoke(Ident("pow"), args) => binary_fn(f64::powf)(args, variables),
-            Expression::FnInvoke(Ident("exp"), args) => unary_fn(f64::exp)(args, variables),
-            Expression::FnInvoke(Ident("ln"), args) => unary_fn(f64::ln)(args, variables),
-            Expression::FnInvoke(Ident("log10"), args) => unary_fn(f64::log10)(args, variables),
-            Expression::FnInvoke(Ident("log2"), args) => unary_fn(f64::log2)(args, variables),
-            Expression::FnInvoke(Ident("log"), args) => binary_fn(f64::log)(args, variables),
-            Expression::FnInvoke(Ident(name), _) => {
-                panic!("Function call to {:?} is not implemented", name)
+            Expression::Add(lhs, rhs) => lhs.eval(stack_frame) + rhs.eval(stack_frame),
+            Expression::Sub(lhs, rhs) => lhs.eval(stack_frame) - rhs.eval(stack_frame),
+            Expression::Mul(lhs, rhs) => lhs.eval(stack_frame) * rhs.eval(stack_frame),
+            Expression::Div(lhs, rhs) => lhs.eval(stack_frame) / rhs.eval(stack_frame),
+            Expression::Rem(lhs, rhs) => lhs.eval(stack_frame) % rhs.eval(stack_frame),
+            Expression::FnInvoke(ident, args) => {
+                let evaluated_args: Vec<_> = args.iter().map(|arg| arg.eval(stack_frame)).collect();
+                match stack_frame.get_function(*ident) {
+                    Some(f) => f.call(&evaluated_args, stack_frame),
+                    None => panic!("function {:?} not found", ident),
+                }
             }
         }
-    }
-}
-
-// 単項関数を式の配列に対する関数に変換する関数
-fn unary_fn<'src>(
-    f: impl Fn(f64) -> f64,
-) -> impl Fn(&Vec<Expression>, &HashMap<Ident<'src>, f64>) -> f64 {
-    move |args, variables| {
-        let arg = args.first().expect("function missing argument");
-        let arg = arg.eval(variables);
-        f(arg)
-    }
-}
-
-// 二項関数を式の配列に対する関数に変換する関数
-fn binary_fn<'src>(
-    f: impl Fn(f64, f64) -> f64,
-) -> impl Fn(&Vec<Expression>, &HashMap<Ident<'src>, f64>) -> f64 {
-    move |args, variables| {
-        let first_arg = args.first().expect("function missing the first argument");
-        let first_arg = first_arg.eval(variables);
-
-        let second_arg = args.get(1).expect("function missing the second argument");
-        let second_arg = second_arg.eval(variables);
-
-        f(first_arg, second_arg)
     }
 }
 
