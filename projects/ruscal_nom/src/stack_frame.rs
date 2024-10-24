@@ -14,9 +14,6 @@ pub struct StackFrame<'src> {
 
 impl<'src> StackFrame<'src> {
     pub fn new() -> Self {
-        let mut variables = HashMap::new();
-        variables.insert(Ident("pi"), std::f64::consts::PI);
-
         let mut functions = HashMap::new();
         functions.insert(Ident("print"), function::unary_fn(function::print));
         functions.insert(Ident("sqrt"), function::unary_fn(f64::sqrt));
@@ -35,7 +32,7 @@ impl<'src> StackFrame<'src> {
         functions.insert(Ident("log"), function::binary_fn(f64::log));
 
         Self {
-            variables,
+            variables: HashMap::new(),
             functions,
             parent: None,
         }
@@ -57,14 +54,8 @@ impl<'src> StackFrame<'src> {
         self.functions.insert(ident, function);
     }
 
-    pub fn get_variable(&self, ident: Ident<'src>) -> Option<f64> {
-        match self.variables.get(&ident) {
-            Some(&value) => Some(value),
-            None => match self.parent {
-                Some(parent) => parent.get_variable(ident),
-                None => None,
-            },
-        }
+    pub(crate) fn get_variable(&self, ident: Ident<'src>) -> Option<f64> {
+        self.variables.get(&ident).copied()
     }
 
     pub(crate) fn get_function(&self, ident: Ident<'src>) -> Option<&FnDef<'src>> {

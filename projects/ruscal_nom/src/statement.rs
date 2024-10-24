@@ -53,8 +53,8 @@ impl<'src> Statements<'src> {
                         body.eval(stack_frame);
                     }
                 }
-                Statement::FnDef { name, args, body } => {
-                    let fn_def = FnDef::User(function::UserFn::new(&args[..], &body));
+                Statement::FnDef { name, params, body } => {
+                    let fn_def = FnDef::User(function::UserFn::new(&params[..], &body));
                     stack_frame.insert_function(*name, fn_def);
                 }
             }
@@ -76,7 +76,7 @@ pub enum Statement<'src> {
     },
     FnDef {
         name: Ident<'src>,
-        args: Vec<Ident<'src>>,
+        params: Vec<Ident<'src>>,
         body: Statements<'src>,
     },
 }
@@ -147,7 +147,7 @@ fn for_statement<'src>(input: &'src str) -> IResult<&'src str, Statement<'src>> 
 fn fn_def<'src>(input: &'src str) -> IResult<&'src str, Statement<'src>> {
     let (input, _) = delimited(multispace0, tag("fn"), multispace1)(input)?;
     let (input, name) = expression::ident(input)?;
-    let (input, args) = delimited(
+    let (input, params) = delimited(
         multispace0,
         delimited(
             tag("("),
@@ -157,5 +157,5 @@ fn fn_def<'src>(input: &'src str) -> IResult<&'src str, Statement<'src>> {
         multispace0,
     )(input)?;
     let (input, body) = delimited(open_brace, Statements::parse, close_brace)(input)?;
-    Ok((input, Statement::FnDef { name, args, body }))
+    Ok((input, Statement::FnDef { name, params, body }))
 }

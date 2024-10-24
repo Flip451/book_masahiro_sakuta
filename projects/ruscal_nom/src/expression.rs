@@ -44,6 +44,7 @@ impl<'src> Expression<'src> {
     pub fn eval(&'src self, stack_frame: &StackFrame<'src>) -> f64 {
         match self {
             Expression::Value(Token::Number(n)) => *n,
+            Expression::Value(Token::Ident(Ident("pi"))) => std::f64::consts::PI,
             Expression::Value(Token::Ident(var)) => stack_frame
                 .get_variable(*var)
                 .expect(&format!("variable {:?} not found", var)),

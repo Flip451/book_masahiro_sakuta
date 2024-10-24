@@ -46,3 +46,11 @@ fn add(a, b) {
 }
 
 print(add(1, 2));
+
+let c = 3;
+
+fn illegal(a, b) {
+    add(a, b) + c;
+}
+
+print(illegal(1, 2));
