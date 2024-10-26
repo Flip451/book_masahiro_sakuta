@@ -2,7 +2,7 @@ use nom::{
     branch::alt,
     bytes::complete::tag,
     character::{
-        complete::{alpha1, alphanumeric1, multispace0, multispace1},
+        complete::{alpha1, alphanumeric1, digit1, multispace0, multispace1},
         streaming::space0,
     },
     combinator::{opt, recognize},
@@ -12,20 +12,17 @@ use nom::{
     IResult,
 };
 
-use crate::{break_result::EvalResult, helper, stack_frame::StackFrame, statement::Statements};
+use crate::{
+    break_result::EvalResult, helper, stack_frame::StackFrame, statement::Statements, value::Value,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Ident<'src>(pub(crate) &'src str);
 
 #[derive(Clone, Debug)]
-pub enum Token<'src> {
-    Ident(Ident<'src>),
-    Number(f64),
-}
-
-#[derive(Clone, Debug)]
 pub enum Expression<'src> {
-    Value(Token<'src>),
+    Ident(Ident<'src>),
+    Value(Value),
     FnInvoke(Ident<'src>, Vec<Expression<'src>>),
     If(
         Box<Expression<'src>>,
@@ -47,19 +44,19 @@ pub enum Expression<'src> {
 
 impl<'src> Expression<'src> {
     pub(crate) fn eval(&'src self, stack_frame: &mut StackFrame<'src>) -> EvalResult {
-        let result = match self {
-            Expression::Value(Token::Number(n)) => *n,
-            Expression::Value(Token::Ident(Ident("pi"))) => std::f64::consts::PI,
-            Expression::Value(Token::Ident(var)) => stack_frame
+        let result: Value = match self {
+            Expression::Value(v) => v.clone(),
+            Expression::Ident(Ident("pi")) => Value::F64(std::f64::consts::PI),
+            Expression::Ident(var) => stack_frame
                 .get_variable(*var)
                 .expect(&format!("variable {:?} not found", var)),
             Expression::If(cond, then, otherwise) => {
-                if cond.eval(stack_frame)? != 0.0 {
+                if cond.eval(stack_frame)? == Value::Boolean(true) {
                     then.eval(stack_frame)?
                 } else if let Some(otherwise) = otherwise {
                     otherwise.eval(stack_frame)?
                 } else {
-                    0.0
+                    Value::EmptyTuple
                 }
             }
             Expression::Add(lhs, rhs) => lhs.eval(stack_frame)? + rhs.eval(stack_frame)?,
@@ -79,37 +76,37 @@ impl<'src> Expression<'src> {
             }
             Expression::Eq(lhs, rhs) => {
                 if lhs.eval(stack_frame)? == rhs.eval(stack_frame)? {
-                    1.0
+                    Value::Boolean(true)
                 } else {
-                    0.0
+                    Value::Boolean(false)
                 }
             }
             Expression::Gt(lhs, rhs) => {
                 if lhs.eval(stack_frame)? > rhs.eval(stack_frame)? {
-                    1.0
+                    Value::Boolean(true)
                 } else {
-                    0.0
+                    Value::Boolean(false)
                 }
             }
             Expression::Lt(lhs, rhs) => {
                 if lhs.eval(stack_frame)? < rhs.eval(stack_frame)? {
-                    1.0
+                    Value::Boolean(true)
                 } else {
-                    0.0
+                    Value::Boolean(false)
                 }
             }
             Expression::Ge(lhs, rhs) => {
                 if lhs.eval(stack_frame)? >= rhs.eval(stack_frame)? {
-                    1.0
+                    Value::Boolean(true)
                 } else {
-                    0.0
+                    Value::Boolean(false)
                 }
             }
             Expression::Le(lhs, rhs) => {
                 if lhs.eval(stack_frame)? <= rhs.eval(stack_frame)? {
-                    1.0
+                    Value::Boolean(true)
                 } else {
-                    0.0
+                    Value::Boolean(false)
                 }
             }
         };
@@ -131,10 +128,28 @@ fn parens<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
     )(input)
 }
 
-// 数値をパースする
-fn number<'src>(input: &'src str) -> IResult<&'src str, Token<'src>> {
+// 浮動小数点数をパースする
+fn double_number<'src>(input: &'src str) -> IResult<&'src str, Value> {
     let (input, float) = delimited(multispace0, double, multispace0)(input)?;
-    Ok((input, Token::Number(float)))
+    Ok((input, Value::F64(float)))
+}
+
+// 整数をパースする
+fn int_number<'src>(input: &'src str) -> IResult<&'src str, Value> {
+    let (input, int) = delimited(
+        multispace0,
+        recognize(preceded(opt(tag("-")), digit1)),
+        multispace0,
+    )(input)?;
+    let int = int
+        .parse::<i64>()
+        .expect(&format!("invalid integer: {int}"));
+    Ok((input, Value::I64(int)))
+}
+
+fn number_expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
+    let (input, value) = alt((int_number, double_number))(input)?;
+    Ok((input, Expression::Value(value)))
 }
 
 // 識別子をパースする
@@ -150,15 +165,15 @@ pub(crate) fn ident<'src>(input: &'src str) -> IResult<&'src str, Ident<'src>> {
     Ok((input, Ident(ident)))
 }
 
-fn ident_token<'src>(input: &'src str) -> IResult<&'src str, Token<'src>> {
+fn ident_expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
     let (input, ident) = ident(input)?;
-    Ok((input, Token::Ident(ident)))
+    Ok((input, Expression::Ident(ident)))
 }
 
 // 値をパースする
 fn value<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
-    let (input, token) = alt((number, ident_token))(input)?;
-    Ok((input, Expression::Value(token)))
+    let (input, value) = alt((number_expr, ident_expr))(input)?;
+    Ok((input, value))
 }
 
 pub fn expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {

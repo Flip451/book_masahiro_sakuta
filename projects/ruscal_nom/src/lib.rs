@@ -1,3 +1,4 @@
+pub(crate) mod value;
 pub(crate) mod expression;
 pub(crate) mod function;
 pub(crate) mod break_result;

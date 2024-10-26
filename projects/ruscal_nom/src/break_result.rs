@@ -1,10 +1,12 @@
 use std::ops::ControlFlow;
 
+use crate::value::Value;
+
 #[derive(PartialEq)]
 pub enum BreakResult {
-    Return(f64),
+    Return(Value),
     Break,
     Continue,
 }
 
-pub(crate) type EvalResult = ControlFlow<BreakResult, f64>;
+pub(crate) type EvalResult = ControlFlow<BreakResult, Value>;

@@ -12,7 +12,7 @@ use crate::{
     expression::{self, Expression, Ident},
     function::{self, FnDef},
     helper,
-    stack_frame::StackFrame,
+    stack_frame::StackFrame, value::Value,
 };
 
 #[derive(Debug, Clone)]
@@ -48,7 +48,6 @@ impl<'src> Statement<'src> {
             terminated(continue_statement, terminator),
             terminated(expr_statement, terminator),
         ))(input)?;
-        println!("{:?}", statement);
         Ok((input, statement))
     }
 }
@@ -63,7 +62,7 @@ impl<'src> Statements<'src> {
     }
 
     pub fn eval(&'src self, stack_frame: &mut StackFrame<'src>) -> EvalResult {
-        let mut result = EvalResult::Continue(0.0);
+        let mut result = EvalResult::Continue(Value::I64(0));
         for statement in self.0.iter() {
             match statement {
                 Statement::VarDef(ident, expr) => {
@@ -86,10 +85,10 @@ impl<'src> Statements<'src> {
                     end,
                     body,
                 } => {
-                    let start = start.eval(stack_frame)? as isize;
-                    let end = end.eval(stack_frame)? as isize;
+                    let start = start.eval(stack_frame)?.coerce_to_i64();
+                    let end = end.eval(stack_frame)?.coerce_to_i64();
                     for i in start..end {
-                        stack_frame.insert_variable(*loop_var, i as f64);
+                        stack_frame.insert_variable(*loop_var, Value::I64(i));
                         match body.eval(stack_frame) {
                             EvalResult::Continue(n) => {
                                 result = EvalResult::Continue(n);

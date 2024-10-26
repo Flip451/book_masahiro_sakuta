@@ -2,12 +2,12 @@ use std::collections::HashMap;
 
 use crate::{
     expression::Ident,
-    function::{self, FnDef},
+    function::{self, FnDef}, value::Value,
 };
 
 #[derive(Default)]
 pub struct StackFrame<'src> {
-    variables: HashMap<Ident<'src>, f64>,
+    variables: HashMap<Ident<'src>, Value>,
     functions: HashMap<Ident<'src>, FnDef<'src>>,
     parent: Option<&'src StackFrame<'src>>,
 }
@@ -46,7 +46,7 @@ impl<'src> StackFrame<'src> {
         }
     }
 
-    pub(crate) fn insert_variable(&mut self, ident: Ident<'src>, value: f64) {
+    pub(crate) fn insert_variable(&mut self, ident: Ident<'src>, value: Value) {
         self.variables.insert(ident, value);
     }
 
@@ -54,8 +54,8 @@ impl<'src> StackFrame<'src> {
         self.functions.insert(ident, function);
     }
 
-    pub(crate) fn get_variable(&self, ident: Ident<'src>) -> Option<f64> {
-        self.variables.get(&ident).copied()
+    pub(crate) fn get_variable(&self, ident: Ident<'src>) -> Option<Value> {
+        self.variables.get(&ident).cloned()
     }
 
     pub(crate) fn get_function(&self, ident: Ident<'src>) -> Option<&FnDef<'src>> {
