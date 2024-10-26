@@ -1,3 +1,5 @@
+use std::ops::ControlFlow;
+
 use crate::{expression::Ident, stack_frame::StackFrame, statement::Statements};
 
 pub(crate) enum FnDef<'src> {
@@ -30,7 +32,10 @@ impl<'src> UserFn<'src> {
         for (ident, arg) in self.params.iter().zip(args.iter()) {
             new_stack_frame.insert_variable(*ident, *arg);
         }
-        self.body.eval(&mut new_stack_frame)
+        match self.body.eval(&mut new_stack_frame) {
+            ControlFlow::Continue(n) => n,
+            ControlFlow::Break(n) => n,
+        }
     }
 }
 

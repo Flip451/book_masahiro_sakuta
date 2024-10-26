@@ -1,51 +1,52 @@
-1;
-2 + 3;
-4 * 5;
-6 / 7;
-8 % 9;
-10 + 11 * 12;
-13 + 14 * 15 / 16;
-17 + 18 * 19 / 20;
-21 + 22 * 23 / 24;
-25 + 26 * 27 / 28;
-sin(pi / 2);
-cos(pi / 3);
-tan(pi / 4);
-pow(2, 3);
-log(10, 100);
-sqrt(16);
-let a = 1 ;
+print(1);
+print(2 + 3);
+print(4 * 5);
+print(6 / 7);
+print(8 % 9);
+print(10 + 11 * 12);
+print(13 + 14 * 15 / 16);
+print(sin(pi / 2));
+print(cos(pi / 3));
+print(tan(pi / 4));
+print(pow(2, 3));
+print(log(10, 100));
+print(sqrt(16));
+let a = 1;
 let b=2;
-a + b ;
-a = 3 ;
-b = 4 ;
-a + b;
+print(a + b );
+a = 3;
+b = 4;
+print(a + b);
 let c = 5;
-pow((a + b + c), 2);
+print(pow((a + b + c), 2));
 
 if c {
-    a
+    a;
 } else {
-    b
+    b;
 };
 
 let a = 1;
 
 for i in 0 to 3 {
-    a + i;
+    print(a + i);
 }
 
 for i in 0 to 10 {
     for j in 0 to 10 {
-        i * 10 + j;
+        print(i * 10 + j);
     }
 }
 
-fn add(a, b) {
-    a + b;
+fn process() {
+    fn add(a, b) {
+        a + b;
+    }
+
+    add(1, pow(2, 3));
 }
 
-print(add(1, 2));
+print(process());
 
 let c = 3;
 
@@ -53,4 +54,13 @@ fn illegal(a, b) {
     add(a, b) + c;
 }
 
-print(illegal(1, 2));
+
+fn early_return(a, b) {
+    if a < b {
+        return a;
+    };
+
+    b;
+}
+
+print(early_return(333, 13243));
