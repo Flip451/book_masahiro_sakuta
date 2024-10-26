@@ -37,6 +37,7 @@ pub enum Expression<'src> {
     Mul(Box<Expression<'src>>, Box<Expression<'src>>),
     Div(Box<Expression<'src>>, Box<Expression<'src>>),
     Rem(Box<Expression<'src>>, Box<Expression<'src>>),
+    Eq(Box<Expression<'src>>, Box<Expression<'src>>),
     Gt(Box<Expression<'src>>, Box<Expression<'src>>),
     Lt(Box<Expression<'src>>, Box<Expression<'src>>),
     Ge(Box<Expression<'src>>, Box<Expression<'src>>),
@@ -74,6 +75,13 @@ impl<'src> Expression<'src> {
                 match stack_frame.get_function(*ident) {
                     Some(f) => f.call(&evaluated_args, stack_frame),
                     None => panic!("function {:?} not found", ident),
+                }
+            }
+            Expression::Eq(lhs, rhs) => {
+                if lhs.eval(stack_frame)? == rhs.eval(stack_frame)? {
+                    1.0
+                } else {
+                    0.0
                 }
             }
             Expression::Gt(lhs, rhs) => {
@@ -175,7 +183,7 @@ fn if_expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
 
 fn comparison_expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
     let (input, lhs) = alt((if_expr, num_expr))(input)?;
-    let (input, op) = alt((tag(">="), tag("<="), tag(">"), tag("<")))(input)?;
+    let (input, op) = alt((tag(">="), tag("<="), tag(">"), tag("<"), tag("==")))(input)?;
     let (input, rhs) = alt((if_expr, num_expr))(input)?;
     Ok((
         input,
@@ -184,6 +192,7 @@ fn comparison_expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src
             "<" => Expression::Lt(Box::new(lhs), Box::new(rhs)),
             ">=" => Expression::Ge(Box::new(lhs), Box::new(rhs)),
             "<=" => Expression::Le(Box::new(lhs), Box::new(rhs)),
+            "==" => Expression::Eq(Box::new(lhs), Box::new(rhs)),
             _ => unreachable!("invalid comparison operator"),
         },
     ))

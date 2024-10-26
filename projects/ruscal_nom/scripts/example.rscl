@@ -34,7 +34,7 @@ for i in 0 to 3 {
 
 for i in 0 to 10 {
     for j in 0 to 10 {
-        if j % 3 > 1 {
+        if j % 3 == 2 {
             continue;
         };
         print(i * 10 + j);
@@ -82,4 +82,11 @@ for i in 0 to 3 {
         };
         print(i * 10 + j);
     }
+}
+
+for i in 0 to 3 {
+    if i < 1 {
+        continue;
+    };
+    print(i);
 }
