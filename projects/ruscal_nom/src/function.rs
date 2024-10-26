@@ -1,6 +1,6 @@
 use std::ops::ControlFlow;
 
-use crate::{expression::Ident, stack_frame::StackFrame, statement::Statements};
+use crate::{break_result::BreakResult, expression::Ident, stack_frame::StackFrame, statement::Statements};
 
 pub(crate) enum FnDef<'src> {
     User(UserFn<'src>),
@@ -34,7 +34,13 @@ impl<'src> UserFn<'src> {
         }
         match self.body.eval(&mut new_stack_frame) {
             ControlFlow::Continue(n) => n,
-            ControlFlow::Break(n) => n,
+            ControlFlow::Break(BreakResult::Return(n)) => n,
+            ControlFlow::Break(BreakResult::Break) => {
+                panic!("Breaking outside loop is prohibited");
+            }
+            ControlFlow::Break(BreakResult::Continue) => {
+                panic!("Continuing outside loop is prohibited");
+            }
         }
     }
 }

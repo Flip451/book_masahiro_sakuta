@@ -21,9 +21,9 @@ let c = 5;
 print(pow((a + b + c), 2));
 
 if c {
-    a;
+    print(a);
 } else {
-    b;
+    print(b);
 };
 
 let a = 1;
@@ -34,7 +34,13 @@ for i in 0 to 3 {
 
 for i in 0 to 10 {
     for j in 0 to 10 {
+        if j % 3 > 1 {
+            continue;
+        };
         print(i * 10 + j);
+        if i >= 8 {
+            break;
+        };
     }
 }
 
@@ -64,3 +70,16 @@ fn early_return(a, b) {
 }
 
 print(early_return(333, 13243));
+
+fn break_alt() {
+    break;
+}
+
+for i in 0 to 3 {
+    for j in 0 to 3 {
+        if j > 1 {
+            break;
+        };
+        print(i * 10 + j);
+    }
+}

@@ -1,5 +1,3 @@
-use std::ops::ControlFlow;
-
 use nom::{
     branch::alt,
     bytes::complete::tag,
@@ -14,7 +12,7 @@ use nom::{
     IResult,
 };
 
-use crate::{helper, stack_frame::StackFrame, statement::Statements};
+use crate::{break_result::EvalResult, helper, stack_frame::StackFrame, statement::Statements};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Ident<'src>(pub(crate) &'src str);
@@ -46,10 +44,8 @@ pub enum Expression<'src> {
     // Pow(Box<Expression<'src>>, Box<Expression<'src>>),
 }
 
-type EvalResult = ControlFlow<f64, f64>;
-
 impl<'src> Expression<'src> {
-    pub fn eval(&'src self, stack_frame: &mut StackFrame<'src>) -> EvalResult {
+    pub(crate) fn eval(&'src self, stack_frame: &mut StackFrame<'src>) -> EvalResult {
         let result = match self {
             Expression::Value(Token::Number(n)) => *n,
             Expression::Value(Token::Ident(Ident("pi"))) => std::f64::consts::PI,
