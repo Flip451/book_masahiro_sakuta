@@ -2,13 +2,13 @@ use nom::{
     branch::alt,
     bytes::complete::tag,
     character::{
-        complete::{alpha1, alphanumeric1, digit1, multispace0, multispace1},
+        complete::{alpha1, alphanumeric1, digit1, multispace0, multispace1, none_of},
         streaming::space0,
     },
     combinator::{opt, recognize},
     multi::{fold_many0, many0},
     number::complete::double,
-    sequence::{delimited, pair, preceded},
+    sequence::{delimited, pair, preceded, terminated},
     IResult,
 };
 
@@ -147,8 +147,57 @@ fn int_number<'src>(input: &'src str) -> IResult<&'src str, Value> {
     Ok((input, Value::I64(int)))
 }
 
+// 数値式をパースする
 fn number_expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
-    let (input, value) = alt((int_number, double_number))(input)?;
+    let (rest_double, double) = double_number(input)?;
+    let (rest_int, int) = int_number(input)?;
+    let (input, value) = if rest_double == rest_int {
+        (rest_int, int)
+    } else {
+        (rest_double, double)
+    };
+    Ok((input, Expression::Value(value)))
+}
+
+// 文字列リテラルをパースする
+fn string_literal<'src>(input: &'src str) -> IResult<&'src str, Value> {
+    let (input, _) = preceded(multispace0, tag("\""))(input)?;
+    let (input, string) = many0(none_of("\""))(input)?;
+    let (input, _) = terminated(tag("\""), multispace0)(input)?;
+    Ok((
+        input,
+        Value::String(
+            string
+                .iter()
+                .collect::<String>()
+                .replace("\\\\", "\\")
+                .replace("\\n", "\n"),
+        ),
+    ))
+}
+
+// 文字列式をパースする
+fn string_expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
+    let (input, value) = string_literal(input)?;
+    Ok((input, Expression::Value(value)))
+}
+
+// 真偽値をパースする
+fn boolean<'src>(input: &'src str) -> IResult<&'src str, Value> {
+    let (input, value) = alt((tag("true"), tag("false")))(input)?;
+    let value = if value == "true" {
+        Value::Boolean(true)
+    } else if value == "false" {
+        Value::Boolean(false)
+    } else {
+        unreachable!("invalid boolean literal: {value}")
+    };
+    Ok((input, value))
+}
+
+// 真偽値式をパースする
+fn boolean_expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
+    let (input, value) = boolean(input)?;
     Ok((input, Expression::Value(value)))
 }
 
@@ -165,6 +214,7 @@ pub(crate) fn ident<'src>(input: &'src str) -> IResult<&'src str, Ident<'src>> {
     Ok((input, Ident(ident)))
 }
 
+// 識別子式をパースする
 fn ident_expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
     let (input, ident) = ident(input)?;
     Ok((input, Expression::Ident(ident)))
@@ -172,7 +222,7 @@ fn ident_expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
 
 // 値をパースする
 fn value<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
-    let (input, value) = alt((number_expr, ident_expr))(input)?;
+    let (input, value) = alt((number_expr, string_expr, boolean_expr, ident_expr))(input)?;
     Ok((input, value))
 }
 

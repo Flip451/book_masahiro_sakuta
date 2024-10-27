@@ -90,3 +90,31 @@ for i in 0 to 3 {
     };
     print(i);
 }
+
+print(3 > 1);
+print( -1 > 5);
+
+dbg(3 > 1);
+dbg(-1 > 5);
+
+let i = i64(123.456);
+let j = 123;
+let f = f64(123.456);
+let b = true;
+let s = "Hello, world!";
+
+print(i);
+print(j);
+print(f);
+print(b);
+print(s);
+
+dbg(i);
+dbg(j);
+dbg(f);
+dbg(b);
+dbg(s);
+
+print(i + f);
+print(i / f);
+print(s + s);

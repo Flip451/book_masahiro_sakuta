@@ -2,7 +2,8 @@ use std::collections::HashMap;
 
 use crate::{
     expression::Ident,
-    function::{self, FnDef}, value::Value,
+    function::{self, FnDef},
+    value::Value,
 };
 
 #[derive(Default)]
@@ -15,7 +16,17 @@ pub struct StackFrame<'src> {
 impl<'src> StackFrame<'src> {
     pub fn new() -> Self {
         let mut functions = HashMap::new();
-        functions.insert(Ident("print"), function::unary_fn(function::print));
+
+        // 標準出力用の関数
+        functions.insert(Ident("print"), function::print());
+        functions.insert(Ident("dbg"), function::print_dbg());
+
+        // 型キャスト用の関数
+        functions.insert(Ident("i64"), function::as_i64());
+        functions.insert(Ident("f64"), function::as_f64());
+        functions.insert(Ident("bool"), function::as_boolean());
+        functions.insert(Ident("str"), function::as_string());
+        // 数学関数
         functions.insert(Ident("sqrt"), function::unary_fn(f64::sqrt));
         functions.insert(Ident("sin"), function::unary_fn(f64::sin));
         functions.insert(Ident("cos"), function::unary_fn(f64::cos));

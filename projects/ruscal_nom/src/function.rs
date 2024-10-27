@@ -5,6 +5,8 @@ use crate::{
     value::Value,
 };
 
+pub(crate) struct NativeFn(pub(crate) Box<dyn Fn(&[Value]) -> Value>);
+
 pub(crate) enum FnDef<'src> {
     User(UserFn<'src>),
     Native(NativeFn),
@@ -48,8 +50,6 @@ impl<'src> UserFn<'src> {
     }
 }
 
-pub(crate) struct NativeFn(Box<dyn Fn(&[Value]) -> Value>);
-
 // 単項関数を式の配列に対する関数に変換する関数
 pub(crate) fn unary_fn<'src>(f: impl Fn(f64) -> f64 + 'static) -> FnDef<'src> {
     FnDef::Native(NativeFn(Box::new(move |args| {
@@ -67,7 +67,50 @@ pub(crate) fn binary_fn<'src>(f: impl Fn(f64, f64) -> f64 + 'static) -> FnDef<'s
     })))
 }
 
-pub(crate) fn print(args: f64) -> f64 {
-    println!("print: {:?}", args);
-    0.0
+// 標準出力に値を出力する関数
+fn print_raw(args: &[Value]) -> Value {
+    println!("print: {}", args[0]);
+    Value::EmptyTuple
+}
+
+pub(crate) fn print() -> FnDef<'static> {
+    FnDef::Native(NativeFn(Box::new(print_raw)))
+}
+
+// 標準出力に値を出力する関数
+fn print_dbg_raw(args: &[Value]) -> Value {
+    println!("print_dbg: {:?}", args[0]);
+    Value::EmptyTuple
+}
+
+pub(crate) fn print_dbg() -> FnDef<'static> {
+    FnDef::Native(NativeFn(Box::new(print_dbg_raw)))
+}
+
+pub(crate) fn as_i64() -> FnDef<'static> {
+    FnDef::Native(NativeFn(Box::new(|args| {
+        let arg = args.first().expect("function missing argument");
+        Value::I64(arg.as_i64().expect("value cannot be coerced to i64"))
+    })))
+}
+
+pub(crate) fn as_f64() -> FnDef<'static> {
+    FnDef::Native(NativeFn(Box::new(|args| {
+        let arg = args.first().expect("function missing argument");
+        Value::F64(arg.as_f64().expect("value cannot be coerced to f64"))
+    })))
+}
+
+pub(crate) fn as_boolean() -> FnDef<'static> {
+    FnDef::Native(NativeFn(Box::new(|args| {
+        let arg = args.first().expect("function missing argument");
+        Value::Boolean(arg.as_boolean().expect("value cannot be coerced to boolean"))
+    })))
+}
+
+pub(crate) fn as_string() -> FnDef<'static> {
+    FnDef::Native(NativeFn(Box::new(|args| {
+        let arg = args.first().expect("function missing argument");
+        Value::String(arg.as_string().expect("value cannot be coerced to string"))
+    })))
 }
