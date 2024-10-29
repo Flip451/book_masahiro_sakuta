@@ -13,13 +13,13 @@ use nom::{
 };
 
 use crate::{
-    break_result::EvalResult, helper, stack_frame::StackFrame, statement::Statements, value::Value,
+    break_result::EvalResult, helper, stack_frame::StackFrame, statement::Statements, type_check::{TypeCheckContext, TypeCheckError}, value::Value
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Ident<'src>(pub(crate) &'src str);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Expression<'src> {
     Ident(Ident<'src>),
     Value(Value),
@@ -111,6 +111,10 @@ impl<'src> Expression<'src> {
             }
         };
         EvalResult::Continue(result)
+    }
+
+    pub(crate) fn type_check(&self, context: &mut TypeCheckContext) -> Result<(), TypeCheckError> {
+        todo!()
     }
 }
 

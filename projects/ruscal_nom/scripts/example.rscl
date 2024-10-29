@@ -11,8 +11,9 @@ print(tan(pi / 4));
 print(pow(2, 3));
 print(log(10, 100));
 print(sqrt(16));
-let a = 1;
-let b=2;
+
+let a : i64 = 1;
+let b:f64=2;
 print(a + b );
 a = 3;
 b = 4;

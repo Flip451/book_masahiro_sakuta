@@ -12,12 +12,14 @@ use crate::{
     expression::{self, Expression, Ident},
     function::{self, FnDef},
     helper,
-    stack_frame::StackFrame, value::Value,
+    stack_frame::StackFrame,
+    type_check::{self, TypeDeclare},
+    value::Value,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Statement<'src> {
-    VarDef(Ident<'src>, Expression<'src>),
+    VarDef(Ident<'src>, TypeDeclare, Expression<'src>),
     Assignment(Ident<'src>, Expression<'src>),
     Expression(Expression<'src>),
     For {
@@ -52,12 +54,16 @@ impl<'src> Statement<'src> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Statements<'src>(Vec<Statement<'src>>);
 
 impl<'src> Statements<'src> {
     pub fn parse(input: &'src str) -> IResult<&'src str, Statements<'src>> {
         let (input, statements) = many0(Statement::parse)(input)?;
+        for (i, statement) in statements.iter().enumerate() {
+            println!("{:?}: {:?}", i, statement);
+        }
+
         Ok((input, Statements(statements)))
     }
 
@@ -65,7 +71,7 @@ impl<'src> Statements<'src> {
         let mut result = EvalResult::Continue(Value::I64(0));
         for statement in self.0.iter() {
             match statement {
-                Statement::VarDef(ident, expr) => {
+                Statement::VarDef(ident, _type_declare, expr) => {
                     let value = expr.eval(stack_frame)?;
                     stack_frame.insert_variable(*ident, value);
                 }
@@ -131,10 +137,18 @@ fn terminator<'src>(input: &'src str) -> IResult<&'src str, ()> {
 
 fn var_def<'src>(input: &'src str) -> IResult<&'src str, Statement<'src>> {
     let (input, _) = delimited(multispace0, tag("let"), multispace1)(input)?;
+    println!("1:\n{:?}", input);
     let (input, name) = expression::ident(input)?;
+    println!("2:\n{:?}", name);
+    let (input, _) = delimited(multispace0, tag(":"), multispace0)(input)?;
+    println!("3:\n{:?}", input);
+    let (input, type_declare) = type_check::TypeDeclare::parse(input)?;
+    println!("4:\n{:?}", type_declare);
     let (input, _) = delimited(multispace0, tag("="), multispace0)(input)?;
+    println!("5:\n{:?}", input);
     let (input, expr) = expression::expr(input)?;
-    Ok((input, Statement::VarDef(name, expr)))
+    println!("6:\n{:?}", expr);
+    Ok((input, Statement::VarDef(name, type_declare, expr)))
 }
 
 fn assignment<'src>(input: &'src str) -> IResult<&'src str, Statement<'src>> {
@@ -200,4 +214,38 @@ fn break_statement<'src>(input: &'src str) -> IResult<&'src str, Statement<'src>
 fn continue_statement<'src>(input: &'src str) -> IResult<&'src str, Statement<'src>> {
     let (input, _) = delimited(multispace0, tag("continue"), multispace0)(input)?;
     Ok((input, Statement::Continue))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::error::Error;
+
+    use super::*;
+
+    #[test]
+    fn test_var_def() -> Result<(), Box<dyn Error>> {
+        let input = r#"
+let a: i64 = 1;
+let b:f64=2;
+"#;
+        let result = Statements::parse(input)?;
+        // assert_eq!(result.0, "");
+        assert_eq!(
+            result.1 .0[0],
+            Statement::VarDef(
+                Ident("a"),
+                TypeDeclare::I64,
+                Expression::Value(Value::I64(1))
+            )
+        );
+        assert_eq!(
+            result.1 .0[1],
+            Statement::VarDef(
+                Ident("b"),
+                TypeDeclare::F64,
+                Expression::Value(Value::F64(2.0))
+            )
+        );
+        Ok(())
+    }
 }
