@@ -18,7 +18,7 @@ print(a + b );
 a = 3;
 b = 4;
 print(a + b);
-let c = 5;
+let c: i64 = 5;
 print(pow((a + b + c), 2));
 
 if c {
@@ -27,7 +27,7 @@ if c {
     print(b);
 };
 
-let a = 1;
+let a: i64 = 1;
 
 for i in 0 to 3 {
     print(a + i);
@@ -45,8 +45,8 @@ for i in 0 to 10 {
     }
 }
 
-fn process() {
-    fn add(a, b) {
+fn process() -> i64 {
+    fn add(a: i64, b: i64) -> i64 {
         a + b;
     }
 
@@ -55,14 +55,14 @@ fn process() {
 
 print(process());
 
-let c = 3;
+let c: i64 = 3;
 
-fn illegal(a, b) {
+fn illegal(a: i64, b: i64) -> i64 {
     add(a, b) + c;
 }
 
 
-fn early_return(a, b) {
+fn early_return(a: i64, b: i64) -> i64 {
     if a < b {
         return a;
     };
@@ -71,10 +71,6 @@ fn early_return(a, b) {
 }
 
 print(early_return(333, 13243));
-
-fn break_alt() {
-    break;
-}
 
 for i in 0 to 3 {
     for j in 0 to 3 {
@@ -98,11 +94,11 @@ print( -1 > 5);
 dbg(3 > 1);
 dbg(-1 > 5);
 
-let i = i64(123.456);
-let j = 123;
-let f = f64(123.456);
-let b = true;
-let s = "Hello, world!";
+let i: i64 = i64(123.456);
+let j: i64 = 123;
+let f: f64 = f64(123.456);
+let b: bool = true;
+let s: string = "Hello, world!";
 
 print(i);
 print(j);

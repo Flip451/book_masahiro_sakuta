@@ -3,14 +3,14 @@ use nom::{
     bytes::complete::tag,
     character::complete::{multispace0, multispace1},
     multi::{many0, separated_list0},
-    sequence::{delimited, terminated},
+    sequence::{delimited, preceded, terminated},
     IResult,
 };
 
 use crate::{
     break_result::{BreakResult, EvalResult},
     expression::{self, Expression, Ident},
-    function::{self, FnDef},
+    function::{self, FnDef, UserFn},
     helper,
     stack_frame::StackFrame,
     type_check::{self, TypeDeclare},
@@ -30,7 +30,8 @@ pub enum Statement<'src> {
     },
     FnDef {
         name: Ident<'src>,
-        params: Vec<Ident<'src>>,
+        params: Vec<(Ident<'src>, TypeDeclare)>,
+        return_type: TypeDeclare,
         body: Statements<'src>,
     },
     Return(Expression<'src>),
@@ -111,8 +112,8 @@ impl<'src> Statements<'src> {
                         };
                     }
                 }
-                Statement::FnDef { name, params, body } => {
-                    let fn_def = FnDef::User(function::UserFn::new(&params[..], &body));
+                Statement::FnDef { name, params, return_type, body } => {
+                    let fn_def = FnDef::User(UserFn::new(&params[..], return_type.clone(), &body));
                     stack_frame.insert_function(*name, fn_def);
                 }
                 Statement::Return(expression) => {
@@ -137,17 +138,11 @@ fn terminator<'src>(input: &'src str) -> IResult<&'src str, ()> {
 
 fn var_def<'src>(input: &'src str) -> IResult<&'src str, Statement<'src>> {
     let (input, _) = delimited(multispace0, tag("let"), multispace1)(input)?;
-    println!("1:\n{:?}", input);
     let (input, name) = expression::ident(input)?;
-    println!("2:\n{:?}", name);
     let (input, _) = delimited(multispace0, tag(":"), multispace0)(input)?;
-    println!("3:\n{:?}", input);
     let (input, type_declare) = type_check::TypeDeclare::parse(input)?;
-    println!("4:\n{:?}", type_declare);
     let (input, _) = delimited(multispace0, tag("="), multispace0)(input)?;
-    println!("5:\n{:?}", input);
     let (input, expr) = expression::expr(input)?;
-    println!("6:\n{:?}", expr);
     Ok((input, Statement::VarDef(name, type_declare, expr)))
 }
 
@@ -188,16 +183,31 @@ fn fn_def<'src>(input: &'src str) -> IResult<&'src str, Statement<'src>> {
     let (input, name) = expression::ident(input)?;
     let (input, params) = delimited(
         multispace0,
-        delimited(
-            tag("("),
-            separated_list0(tag(","), expression::ident),
-            tag(")"),
-        ),
+        delimited(tag("("), separated_list0(tag(","), parameter), tag(")")),
         multispace0,
+    )(input)?;
+    let (input, return_type) = preceded(
+        delimited(multispace0, tag("->"), multispace0),
+        TypeDeclare::parse,
     )(input)?;
     let (input, body) =
         delimited(helper::open_brace, Statements::parse, helper::close_brace)(input)?;
-    Ok((input, Statement::FnDef { name, params, body }))
+    Ok((
+        input,
+        Statement::FnDef {
+            name,
+            params,
+            return_type,
+            body,
+        },
+    ))
+}
+
+fn parameter<'src>(input: &'src str) -> IResult<&'src str, (Ident<'src>, TypeDeclare)> {
+    let (input, name) = expression::ident(input)?;
+    let (input, _) = delimited(multispace0, tag(":"), multispace0)(input)?;
+    let (input, type_declare) = TypeDeclare::parse(input)?;
+    Ok((input, (name, type_declare)))
 }
 
 fn return_statement<'src>(input: &'src str) -> IResult<&'src str, Statement<'src>> {

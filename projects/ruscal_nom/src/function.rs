@@ -1,8 +1,7 @@
 use std::ops::ControlFlow;
 
 use crate::{
-    break_result::BreakResult, expression::Ident, stack_frame::StackFrame, statement::Statements,
-    value::Value,
+    break_result::BreakResult, expression::Ident, stack_frame::StackFrame, statement::Statements, type_check::TypeDeclare, value::Value
 };
 
 pub(crate) struct NativeFn(pub(crate) Box<dyn Fn(&[Value]) -> Value>);
@@ -22,19 +21,20 @@ impl<'src> FnDef<'src> {
 }
 
 pub(crate) struct UserFn<'src> {
-    params: &'src [Ident<'src>],
+    params: &'src [(Ident<'src>, TypeDeclare)],
+    return_type: TypeDeclare,
     body: &'src Statements<'src>,
 }
 
 impl<'src> UserFn<'src> {
-    pub(crate) fn new(params: &'src [Ident<'src>], body: &'src Statements<'src>) -> Self {
-        Self { params, body }
+    pub(crate) fn new(params: &'src [(Ident<'src>, TypeDeclare)], return_type: TypeDeclare, body: &'src Statements<'src>) -> Self {
+        Self { params, return_type, body }
     }
 
     fn call(&self, args: &[Value], stack_frame: &StackFrame<'src>) -> Value {
         let mut new_stack_frame = StackFrame::push(stack_frame);
 
-        for (ident, arg) in self.params.iter().zip(args.iter()) {
+        for ((ident, _type_declare), arg) in self.params.iter().zip(args.iter()) {
             new_stack_frame.insert_variable(*ident, arg.clone());
         }
         match self.body.eval(&mut new_stack_frame) {
