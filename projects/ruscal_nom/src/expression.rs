@@ -13,8 +13,15 @@ use nom::{
 };
 
 use crate::{
-    break_result::EvalResult, helper, stack_frame::StackFrame, statement::Statements, type_check::{TypeCheckContext, TypeCheckError}, value::Value
+    break_result::EvalResult,
+    helper,
+    stack_frame::StackFrame,
+    statement::Statements,
+    type_check::{type_check_binary_op, BinaryOp, TypeCheckContext, TypeCheckError, TypeDeclare},
+    value::Value,
 };
+
+use itertools::Itertools;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Ident<'src>(pub(crate) &'src str);
@@ -113,8 +120,55 @@ impl<'src> Expression<'src> {
         EvalResult::Continue(result)
     }
 
-    pub(crate) fn type_check(&self, context: &mut TypeCheckContext) -> Result<(), TypeCheckError> {
-        todo!()
+    pub(crate) fn type_check(
+        &self,
+        context: &mut TypeCheckContext<'src>,
+    ) -> Result<TypeDeclare, TypeCheckError<'src>> {
+        Ok(match &self {
+            Expression::Ident(ident) => context
+                .get_variable(ident)
+                .ok_or(TypeCheckError::UndefinedVariable(*ident))?,
+            Expression::Value(Value::Boolean(_)) => TypeDeclare::Boolean,
+            Expression::Value(Value::F64(_)) => TypeDeclare::F64,
+            Expression::Value(Value::I64(_)) => TypeDeclare::I64,
+            Expression::Value(Value::String(_)) => TypeDeclare::String,
+            Expression::Value(Value::EmptyTuple) => TypeDeclare::EmptyTuple,
+            Expression::FnInvoke(ident, args) => {
+                let args_type = args
+                    .iter()
+                    .map(|v| v.type_check(context))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let func = context
+                    .get_function(ident)
+                    .ok_or(TypeCheckError::UndefinedFunction(*ident))?;
+                let params = func.params();
+                for pair in args_type.iter().zip_longest(params.iter()) {
+                    match pair {
+                        itertools::EitherOrBoth::Both(arg_type, (_, param_type)) => {
+                            arg_type.coerce_type(&param_type)?
+                        }
+                        itertools::EitherOrBoth::Left(_) => {
+                            return Err(TypeCheckError::InvalidArgumentCount);
+                        }
+                        itertools::EitherOrBoth::Right(_) => {
+                            return Err(TypeCheckError::InvalidArgumentCount);
+                        }
+                    };
+                }
+                func.return_type()
+            }
+            Expression::If(condition, true_statements, false_statement) => todo!(),
+            Expression::Add(lhs, rhs) => type_check_binary_op(lhs, rhs, context, BinaryOp::Add)?,
+            Expression::Sub(lhs, rhs) => type_check_binary_op(lhs, rhs, context, BinaryOp::Sub)?,
+            Expression::Mul(lhs, rhs) => type_check_binary_op(lhs, rhs, context, BinaryOp::Mul)?,
+            Expression::Div(lhs, rhs) => type_check_binary_op(lhs, rhs, context, BinaryOp::Div)?,
+            Expression::Rem(lhs, rhs) => type_check_binary_op(lhs, rhs, context, BinaryOp::Rem)?,
+            Expression::Eq(lhs, rhs) => type_check_binary_op(lhs, rhs, context, BinaryOp::Eq)?,
+            Expression::Gt(lhs, rhs) => type_check_binary_op(lhs, rhs, context, BinaryOp::Gt)?,
+            Expression::Lt(lhs, rhs) => type_check_binary_op(lhs, rhs, context, BinaryOp::Lt)?,
+            Expression::Ge(lhs, rhs) => type_check_binary_op(lhs, rhs, context, BinaryOp::Ge)?,
+            Expression::Le(lhs, rhs) => type_check_binary_op(lhs, rhs, context, BinaryOp::Le)?,
+        })
     }
 }
 

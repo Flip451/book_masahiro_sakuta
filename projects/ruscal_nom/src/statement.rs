@@ -10,7 +10,7 @@ use nom::{
 use crate::{
     break_result::{BreakResult, EvalResult},
     expression::{self, Expression, Ident},
-    function::{self, FnDef, UserFn},
+    function::{FnDef, UserFn},
     helper,
     stack_frame::StackFrame,
     type_check::{self, TypeDeclare},
@@ -112,8 +112,13 @@ impl<'src> Statements<'src> {
                         };
                     }
                 }
-                Statement::FnDef { name, params, return_type, body } => {
-                    let fn_def = FnDef::User(UserFn::new(&params[..], return_type.clone(), &body));
+                Statement::FnDef {
+                    name,
+                    params,
+                    return_type,
+                    body,
+                } => {
+                    let fn_def = FnDef::User(UserFn::new(&params[..], *return_type, &body));
                     stack_frame.insert_function(*name, fn_def);
                 }
                 Statement::Return(expression) => {

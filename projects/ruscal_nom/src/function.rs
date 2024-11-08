@@ -18,6 +18,20 @@ impl<'src> FnDef<'src> {
             FnDef::Native(NativeFn(f)) => f(args),
         }
     }
+
+    pub(crate) fn params(&self) -> &'src [(Ident<'src>, TypeDeclare)] {
+        match self {
+            FnDef::User(user_fn) => user_fn.params,
+            FnDef::Native(native_fn) => todo!(),
+        }
+    }
+
+    pub(crate) fn return_type(&self) -> TypeDeclare {
+        match self {
+            FnDef::User(user_fn) => user_fn.return_type,
+            FnDef::Native(native_fn) => todo!(),
+        }
+    }
 }
 
 pub(crate) struct UserFn<'src> {

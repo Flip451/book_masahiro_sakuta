@@ -103,12 +103,13 @@ impl Value {
         b: impl Fn(bool, bool) -> bool,
         s: impl Fn(&str, &str) -> String,
     ) -> Self {
+        use Value::*;
         match (lhs, rhs) {
-            (Value::F64(lhs), rhs) => Value::F64(d(*lhs, rhs.coerce_to_f64())),
-            (lhs, Value::F64(rhs)) => Value::F64(d(lhs.coerce_to_f64(), *rhs)),
-            (Value::I64(lhs), Value::I64(rhs)) => Value::I64(i(*lhs, *rhs)),
-            (Value::Boolean(lhs), Value::Boolean(rhs)) => Value::Boolean(b(*lhs, *rhs)),
-            (Value::String(lhs), Value::String(rhs)) => Value::String(s(lhs, rhs)),
+            (F64(lhs), rhs) => F64(d(*lhs, rhs.coerce_to_f64())),
+            (lhs, F64(rhs)) => F64(d(lhs.coerce_to_f64(), *rhs)),
+            (I64(lhs), I64(rhs)) => I64(i(*lhs, *rhs)),
+            (Boolean(lhs), Boolean(rhs)) => Boolean(b(*lhs, *rhs)),
+            (String(lhs), String(rhs)) => String(s(lhs, rhs)),
             _ => panic!("Cannot perform binary operation on {:?} and {:?}", lhs, rhs),
         }
     }
