@@ -233,7 +233,10 @@ impl<'src> Expression<'src> {
                 let params = func.params();
                 for pair in args_type.iter().zip_longest(params.iter()) {
                     match pair {
-                        itertools::EitherOrBoth::Both((arg_type, arg_span), (_param_name, param_type)) => {
+                        itertools::EitherOrBoth::Both(
+                            (arg_type, arg_span),
+                            (_param_name, param_type),
+                        ) => {
                             arg_type.coerce_type(&param_type, *arg_span)? // TODO: Ident の中身に直接アクセスしないようにする
                         }
                         itertools::EitherOrBoth::Left((_, arg_span)) => {
@@ -399,9 +402,9 @@ fn string_expr<'src>(
 // 真偽値をパースする
 fn boolean<'src>(input: LocatedSpan<&'src str>) -> IResult<LocatedSpan<&'src str>, Value> {
     let (input, value) = alt((tag("true"), tag("false")))(input)?;
-    let value = if *value.fragment() == "true" {
+    let value = if *value == "true" {
         Value::Boolean(true)
-    } else if *value.fragment() == "false" {
+    } else if *value == "false" {
         Value::Boolean(false)
     } else {
         unreachable!("invalid boolean literal: {value}")
@@ -435,7 +438,7 @@ pub(crate) fn ident<'src>(
         )),
         multispace0,
     )(input)?;
-    Ok((input, Ident(ident.fragment())))
+    Ok((input, Ident(*ident)))
 }
 
 // 識別子式をパースする
@@ -495,7 +498,7 @@ fn comparison_expr<'src>(
         rest,
         Expression::new(
             helper::span_taken(input, rest),
-            match *op.fragment() {
+            match *op {
                 ">" => ExpressionEnum::Gt(Box::new(lhs), Box::new(rhs)),
                 "<" => ExpressionEnum::Lt(Box::new(lhs), Box::new(rhs)),
                 ">=" => ExpressionEnum::Ge(Box::new(lhs), Box::new(rhs)),
@@ -521,7 +524,7 @@ fn num_expr<'src>(
         move || lhs.clone(),
         |lhs, (op, rhs)| {
             let span = helper::span_taken(input, lhs.located_span());
-            match *op.fragment() {
+            match *op {
                 "+" => Expression::new(span, ExpressionEnum::Add(Box::new(lhs), Box::new(rhs))),
                 "-" => Expression::new(span, ExpressionEnum::Sub(Box::new(lhs), Box::new(rhs))),
                 _ => unreachable!("Multiplicative operator is not allowed in additive expression"),
@@ -546,7 +549,7 @@ fn term<'src>(input: LocatedSpan<&'src str>) -> IResult<LocatedSpan<&'src str>, 
         move || lhs.clone(),
         |lhs, (op, rhs)| {
             let span = helper::span_taken(input, lhs.located_span());
-            match *op.fragment() {
+            match *op {
                 "*" => Expression::new(span, ExpressionEnum::Mul(Box::new(lhs), Box::new(rhs))),
                 "/" => Expression::new(span, ExpressionEnum::Div(Box::new(lhs), Box::new(rhs))),
                 "%" => Expression::new(span, ExpressionEnum::Rem(Box::new(lhs), Box::new(rhs))),
