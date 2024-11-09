@@ -4,35 +4,62 @@ use nom::{
     branch::alt, bytes::complete::tag, character::complete::multispace0, sequence::delimited,
     IResult, Parser,
 };
+use nom_locate::LocatedSpan;
 use thiserror::Error;
 
 use crate::{
-    constants, expression::{Expression, Ident}, function::{self, FnDef}
+    constants,
+    expression::{Expression, Ident},
+    function::{self, FnDef},
 };
 
-#[derive(Debug, Error)]
-pub enum TypeCheckError {
-    #[error("type mismatch. {0} cannot be assigned to {1}")]
-    TypeMismatch(TypeDeclare, TypeDeclare),
-    #[error("undefined variable: {0:?}")]
-    UndefinedVariable(String),
-    #[error("undefined function: {0:?}")]
-    UndefinedFunction(String),
-    #[error("invalid binary operation: {0:?} is not defined between {1:?} and {2:?}")]
-    InvalidBinaryOperation(BinaryOp, TypeDeclare, TypeDeclare),
-    #[error("invalid argument count")]
-    InvalidArgumentCount,
-    #[error("invalid condition type")]
-    InvalidConditionType,
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Span<'src>(pub(crate) LocatedSpan<&'src str>);
+
+impl<'src> Span<'src> {
+    pub(crate) fn new(input: LocatedSpan<&'src str>) -> Self {
+        Self(input)
+    }
+
+    pub(crate) fn into_inner(self) -> LocatedSpan<&'src str> {
+        self.0
+    }
 }
 
-pub struct TypeCheckContext<'src> {
+impl<'src> std::fmt::Display for Span<'src> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "location: {}:{}",
+            self.0.location_line(),
+            self.0.get_utf8_column()
+        )
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum TypeCheckError<'src> {
+    #[error("{0}: type mismatch. {1} cannot be assigned to {2}")]
+    TypeMismatch(Span<'src>, TypeDeclare, TypeDeclare),
+    #[error("{0}: undefined variable: {1:?}")]
+    UndefinedVariable(Span<'src>, String),
+    #[error("{0}: undefined function: {1:?}")]
+    UndefinedFunction(Span<'src>, String),
+    #[error("{0}: invalid binary operation: {1:?} is not defined between {2:?} and {3:?}")]
+    InvalidBinaryOperation(Span<'src>, BinaryOp, TypeDeclare, TypeDeclare),
+    #[error("{0}: invalid argument count")]
+    InvalidArgumentCount(Span<'src>),
+    #[error("{0}: invalid condition type")]
+    InvalidConditionType(Span<'src>),
+}
+
+pub struct TypeCheckContext<'src, 'ctx> {
     variables: HashMap<Ident<'src>, TypeDeclare>,
     functions: HashMap<Ident<'src>, FnDef<'src>>,
-    parent: Option<&'src TypeCheckContext<'src>>,
+    parent: Option<&'ctx TypeCheckContext<'src, 'ctx>>,
 }
 
-impl<'src> TypeCheckContext<'src> {
+impl<'src, 'ctx> TypeCheckContext<'src, 'ctx> {
     pub fn new() -> Self {
         Self {
             variables: constants::standard_constants_types(),
@@ -41,7 +68,7 @@ impl<'src> TypeCheckContext<'src> {
         }
     }
 
-    pub(crate) fn push(context: &'src Self) -> TypeCheckContext<'src> {
+    pub(crate) fn push(context: &'ctx Self) -> TypeCheckContext<'src, 'ctx> {
         Self {
             variables: HashMap::new(),
             functions: HashMap::new(),
@@ -92,7 +119,8 @@ impl TypeDeclare {
     pub(crate) fn coerce_type<'src>(
         &self,
         target: &TypeDeclare,
-    ) -> Result<TypeDeclare, TypeCheckError> {
+        span: Span<'src>,
+    ) -> Result<TypeDeclare, TypeCheckError<'src>> {
         use TypeDeclare::*;
         Ok(match (self, target) {
             (Any, _) => *target,
@@ -104,11 +132,11 @@ impl TypeDeclare {
             (String, String) => String,
             (Boolean, Boolean) => Boolean,
             (EmptyTuple, EmptyTuple) => EmptyTuple,
-            _ => return Err(TypeCheckError::TypeMismatch(*self, *target)),
+            _ => return Err(TypeCheckError::TypeMismatch(span, *self, *target)),
         })
     }
 
-    pub(crate) fn parse(input: &str) -> IResult<&str, Self> {
+    pub(crate) fn parse(input: LocatedSpan<&str>) -> IResult<LocatedSpan<&str>, Self> {
         use TypeDeclare::*;
         let (input, type_declare) = delimited(
             multispace0,
@@ -161,12 +189,13 @@ impl std::fmt::Debug for BinaryOp {
     }
 }
 
-pub(crate) fn type_check_binary_op<'src>(
+pub(crate) fn type_check_binary_op<'src, 'ctx>(
     lhs: &'src Expression<'src>,
     rhs: &'src Expression<'src>,
-    context: &mut TypeCheckContext<'src>,
+    context: &mut TypeCheckContext<'src, 'ctx>,
     op: BinaryOp,
-) -> Result<TypeDeclare, TypeCheckError> {
+    span: Span<'src>,
+) -> Result<TypeDeclare, TypeCheckError<'src>> {
     use BinaryOp::*;
     use TypeDeclare::*;
     let lhs_type = lhs.type_check(context)?;
@@ -181,11 +210,11 @@ pub(crate) fn type_check_binary_op<'src>(
         | (Add | Sub | Mul | Div | Rem, F64, I64)
         | (Add | Sub | Mul | Div | Rem, F64, F64) => Ok(F64),
         (Add, String, String) => Ok(String),
-        (op @ (Sub | Mul | Div | Rem), String, String) => {
-            Err(TypeCheckError::InvalidBinaryOperation(op, String, String))
-        }
+        (op @ (Sub | Mul | Div | Rem), String, String) => Err(
+            TypeCheckError::InvalidBinaryOperation(span, op, String, String),
+        ),
         (op @ (Add | Sub | Mul | Div | Rem), lhs, rhs) => {
-            Err(TypeCheckError::InvalidBinaryOperation(op, lhs, rhs))
+            Err(TypeCheckError::InvalidBinaryOperation(span, op, lhs, rhs))
         }
         // 比較演算
         (Eq | Gt | Lt | Ge | Le, Any, Any) => Ok(Boolean),
@@ -194,7 +223,7 @@ pub(crate) fn type_check_binary_op<'src>(
         (Eq | Gt | Lt | Ge | Le, I64 | F64, I64 | F64) => Ok(Boolean),
         (Eq | Gt | Lt | Ge | Le, String, String) => Ok(Boolean),
         (op @ (Eq | Gt | Lt | Ge | Le), lhs, rhs) => {
-            Err(TypeCheckError::InvalidBinaryOperation(op, lhs, rhs))
+            Err(TypeCheckError::InvalidBinaryOperation(span, op, lhs, rhs))
         }
     }
 }

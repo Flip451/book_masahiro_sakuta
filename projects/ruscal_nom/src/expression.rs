@@ -11,13 +11,16 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated},
     IResult,
 };
+use nom_locate::LocatedSpan;
 
 use crate::{
     break_result::EvalResult,
-    helper,
+    helper::{self},
     stack_frame::StackFrame,
     statement::Statements,
-    type_check::{type_check_binary_op, BinaryOp, TypeCheckContext, TypeCheckError, TypeDeclare},
+    type_check::{
+        type_check_binary_op, BinaryOp, Span, TypeCheckContext, TypeCheckError, TypeDeclare,
+    },
     value::Value,
 };
 
@@ -33,7 +36,7 @@ impl<'src> ToString for Ident<'src> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Expression<'src> {
+pub enum ExpressionEnum<'src> {
     Ident(Ident<'src>),
     Value(Value),
     FnInvoke(Ident<'src>, Vec<Expression<'src>>),
@@ -55,14 +58,41 @@ pub enum Expression<'src> {
     // Pow(Box<Expression<'src>>, Box<Expression<'src>>),
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct Expression<'src> {
+    span: Span<'src>,
+    inner: ExpressionEnum<'src>,
+}
+
 impl<'src> Expression<'src> {
+    fn new(span: Span<'src>, inner: ExpressionEnum<'src>) -> Self {
+        Self { span, inner }
+    }
+
+    fn located_span(&self) -> LocatedSpan<&'src str> {
+        self.span.into_inner()
+    }
+
+    fn span(&self) -> Span<'src> {
+        self.span
+    }
+
     pub(crate) fn eval(&'src self, stack_frame: &mut StackFrame<'src>) -> EvalResult {
         let result: Value = match self {
-            Expression::Value(v) => v.clone(),
-            Expression::Ident(var) => stack_frame
+            Expression {
+                span: _,
+                inner: ExpressionEnum::Value(v),
+            } => v.clone(),
+            Expression {
+                span,
+                inner: ExpressionEnum::Ident(var),
+            } => stack_frame
                 .get_variable(*var)
-                .expect(&format!("variable {:?} not found", var)),
-            Expression::If(cond, then, otherwise) => {
+                .expect(&format!("{}\nvariable {:?} not found", span, var)),
+            Expression {
+                span: _,
+                inner: ExpressionEnum::If(cond, then, otherwise),
+            } => {
                 if cond.eval(stack_frame)? == Value::Boolean(true) {
                     then.eval(stack_frame)?
                 } else if let Some(otherwise) = otherwise {
@@ -71,50 +101,83 @@ impl<'src> Expression<'src> {
                     Value::EmptyTuple
                 }
             }
-            Expression::Add(lhs, rhs) => lhs.eval(stack_frame)? + rhs.eval(stack_frame)?,
-            Expression::Sub(lhs, rhs) => lhs.eval(stack_frame)? - rhs.eval(stack_frame)?,
-            Expression::Mul(lhs, rhs) => lhs.eval(stack_frame)? * rhs.eval(stack_frame)?,
-            Expression::Div(lhs, rhs) => lhs.eval(stack_frame)? / rhs.eval(stack_frame)?,
-            Expression::Rem(lhs, rhs) => lhs.eval(stack_frame)? % rhs.eval(stack_frame)?,
-            Expression::FnInvoke(ident, args) => {
+            Expression {
+                span: _,
+                inner: ExpressionEnum::Add(lhs, rhs),
+            } => lhs.eval(stack_frame)? + rhs.eval(stack_frame)?,
+            Expression {
+                span: _,
+                inner: ExpressionEnum::Sub(lhs, rhs),
+            } => lhs.eval(stack_frame)? - rhs.eval(stack_frame)?,
+            Expression {
+                span: _,
+                inner: ExpressionEnum::Mul(lhs, rhs),
+            } => lhs.eval(stack_frame)? * rhs.eval(stack_frame)?,
+            Expression {
+                span: _,
+                inner: ExpressionEnum::Div(lhs, rhs),
+            } => lhs.eval(stack_frame)? / rhs.eval(stack_frame)?,
+            Expression {
+                span: _,
+                inner: ExpressionEnum::Rem(lhs, rhs),
+            } => lhs.eval(stack_frame)? % rhs.eval(stack_frame)?,
+            Expression {
+                span,
+                inner: ExpressionEnum::FnInvoke(ident, args),
+            } => {
                 let mut evaluated_args = vec![];
                 for arg in args.iter() {
                     evaluated_args.push(arg.eval(stack_frame)?);
                 }
                 match stack_frame.get_function(*ident) {
                     Some(f) => f.call(&evaluated_args, stack_frame),
-                    None => panic!("function {:?} not found", ident),
+                    None => panic!("{}\nfunction {:?} not found", span, ident),
                 }
             }
-            Expression::Eq(lhs, rhs) => {
+            Expression {
+                span: _,
+                inner: ExpressionEnum::Eq(lhs, rhs),
+            } => {
                 if lhs.eval(stack_frame)? == rhs.eval(stack_frame)? {
                     Value::Boolean(true)
                 } else {
                     Value::Boolean(false)
                 }
             }
-            Expression::Gt(lhs, rhs) => {
+            Expression {
+                span: _,
+                inner: ExpressionEnum::Gt(lhs, rhs),
+            } => {
                 if lhs.eval(stack_frame)? > rhs.eval(stack_frame)? {
                     Value::Boolean(true)
                 } else {
                     Value::Boolean(false)
                 }
             }
-            Expression::Lt(lhs, rhs) => {
+            Expression {
+                span: _,
+                inner: ExpressionEnum::Lt(lhs, rhs),
+            } => {
                 if lhs.eval(stack_frame)? < rhs.eval(stack_frame)? {
                     Value::Boolean(true)
                 } else {
                     Value::Boolean(false)
                 }
             }
-            Expression::Ge(lhs, rhs) => {
+            Expression {
+                span: _,
+                inner: ExpressionEnum::Ge(lhs, rhs),
+            } => {
                 if lhs.eval(stack_frame)? >= rhs.eval(stack_frame)? {
                     Value::Boolean(true)
                 } else {
                     Value::Boolean(false)
                 }
             }
-            Expression::Le(lhs, rhs) => {
+            Expression {
+                span: _,
+                inner: ExpressionEnum::Le(lhs, rhs),
+            } => {
                 if lhs.eval(stack_frame)? <= rhs.eval(stack_frame)? {
                     Value::Boolean(true)
                 } else {
@@ -127,75 +190,134 @@ impl<'src> Expression<'src> {
 
     pub(crate) fn type_check(
         &'src self,
-        context: &mut TypeCheckContext<'src>,
-    ) -> Result<TypeDeclare, TypeCheckError> {
+        context: &mut TypeCheckContext<'src, '_>,
+    ) -> Result<TypeDeclare, TypeCheckError<'src>> {
         Ok(match &self {
-            Expression::Ident(ident) => context
+            Expression {
+                span,
+                inner: ExpressionEnum::Ident(ident),
+            } => context
                 .get_variable(ident)
-                .ok_or(TypeCheckError::UndefinedVariable(ident.to_string()))?,
-            Expression::Value(Value::Boolean(_)) => TypeDeclare::Boolean,
-            Expression::Value(Value::F64(_)) => TypeDeclare::F64,
-            Expression::Value(Value::I64(_)) => TypeDeclare::I64,
-            Expression::Value(Value::String(_)) => TypeDeclare::String,
-            Expression::Value(Value::EmptyTuple) => TypeDeclare::EmptyTuple,
-            Expression::FnInvoke(ident, args) => {
+                .ok_or(TypeCheckError::UndefinedVariable(*span, ident.to_string()))?,
+            Expression {
+                span: _,
+                inner: ExpressionEnum::Value(Value::Boolean(_)),
+            } => TypeDeclare::Boolean,
+            Expression {
+                span: _,
+                inner: ExpressionEnum::Value(Value::F64(_)),
+            } => TypeDeclare::F64,
+            Expression {
+                span: _,
+                inner: ExpressionEnum::Value(Value::I64(_)),
+            } => TypeDeclare::I64,
+            Expression {
+                span: _,
+                inner: ExpressionEnum::Value(Value::String(_)),
+            } => TypeDeclare::String,
+            Expression {
+                span: _,
+                inner: ExpressionEnum::Value(Value::EmptyTuple),
+            } => TypeDeclare::EmptyTuple,
+            Expression {
+                span,
+                inner: ExpressionEnum::FnInvoke(ident, args),
+            } => {
                 let args_type = args
                     .iter()
-                    .map(|v| v.type_check(context))
+                    .map(|v| Ok((v.type_check(context)?, v.span())))
                     .collect::<Result<Vec<_>, _>>()?;
                 let func = context
                     .get_function(ident)
-                    .ok_or(TypeCheckError::UndefinedFunction(ident.to_string()))?;
+                    .ok_or(TypeCheckError::UndefinedFunction(*span, ident.to_string()))?;
                 let params = func.params();
                 for pair in args_type.iter().zip_longest(params.iter()) {
                     match pair {
-                        itertools::EitherOrBoth::Both(arg_type, (_, param_type)) => {
-                            arg_type.coerce_type(&param_type)?
+                        itertools::EitherOrBoth::Both((arg_type, arg_span), (_param_name, param_type)) => {
+                            arg_type.coerce_type(&param_type, *arg_span)? // TODO: Ident の中身に直接アクセスしないようにする
                         }
-                        itertools::EitherOrBoth::Left(_) => {
-                            return Err(TypeCheckError::InvalidArgumentCount);
+                        itertools::EitherOrBoth::Left((_, arg_span)) => {
+                            return Err(TypeCheckError::InvalidArgumentCount(*arg_span));
                         }
-                        itertools::EitherOrBoth::Right(_) => {
-                            return Err(TypeCheckError::InvalidArgumentCount);
+                        itertools::EitherOrBoth::Right((_param_name, _param_type)) => {
+                            return Err(TypeCheckError::InvalidArgumentCount(*span));
+                            // TODO: param_name.0 への直接のアクセスを禁ずる
                         }
                     };
                 }
                 func.return_type()
             }
-            Expression::If(condition, true_statements, false_statement) => {
+            Expression {
+                span,
+                inner: ExpressionEnum::If(condition, true_statements, false_statement),
+            } => {
                 let condition_type = condition.type_check(context)?;
                 if condition_type != TypeDeclare::Boolean {
-                    return Err(TypeCheckError::InvalidConditionType);
+                    return Err(TypeCheckError::InvalidConditionType(*span));
                 }
                 let true_type = true_statements.type_check(context)?;
                 if let Some(false_statements) = false_statement {
                     let false_type = false_statements.type_check(context)?;
-                    true_type.coerce_type(&false_type)?
+                    true_type.coerce_type(&false_type, *span)?
                 } else {
                     true_type
                 }
             }
-            Expression::Add(lhs, rhs) => type_check_binary_op(lhs, rhs, context, BinaryOp::Add)?,
-            Expression::Sub(lhs, rhs) => type_check_binary_op(lhs, rhs, context, BinaryOp::Sub)?,
-            Expression::Mul(lhs, rhs) => type_check_binary_op(lhs, rhs, context, BinaryOp::Mul)?,
-            Expression::Div(lhs, rhs) => type_check_binary_op(lhs, rhs, context, BinaryOp::Div)?,
-            Expression::Rem(lhs, rhs) => type_check_binary_op(lhs, rhs, context, BinaryOp::Rem)?,
-            Expression::Eq(lhs, rhs) => type_check_binary_op(lhs, rhs, context, BinaryOp::Eq)?,
-            Expression::Gt(lhs, rhs) => type_check_binary_op(lhs, rhs, context, BinaryOp::Gt)?,
-            Expression::Lt(lhs, rhs) => type_check_binary_op(lhs, rhs, context, BinaryOp::Lt)?,
-            Expression::Ge(lhs, rhs) => type_check_binary_op(lhs, rhs, context, BinaryOp::Ge)?,
-            Expression::Le(lhs, rhs) => type_check_binary_op(lhs, rhs, context, BinaryOp::Le)?,
+            Expression {
+                span,
+                inner: ExpressionEnum::Add(lhs, rhs),
+            } => type_check_binary_op(lhs, rhs, context, BinaryOp::Add, *span)?,
+            Expression {
+                span,
+                inner: ExpressionEnum::Sub(lhs, rhs),
+            } => type_check_binary_op(lhs, rhs, context, BinaryOp::Sub, *span)?,
+            Expression {
+                span,
+                inner: ExpressionEnum::Mul(lhs, rhs),
+            } => type_check_binary_op(lhs, rhs, context, BinaryOp::Mul, *span)?,
+            Expression {
+                span,
+                inner: ExpressionEnum::Div(lhs, rhs),
+            } => type_check_binary_op(lhs, rhs, context, BinaryOp::Div, *span)?,
+            Expression {
+                span,
+                inner: ExpressionEnum::Rem(lhs, rhs),
+            } => type_check_binary_op(lhs, rhs, context, BinaryOp::Rem, *span)?,
+            Expression {
+                span,
+                inner: ExpressionEnum::Eq(lhs, rhs),
+            } => type_check_binary_op(lhs, rhs, context, BinaryOp::Eq, *span)?,
+            Expression {
+                span,
+                inner: ExpressionEnum::Gt(lhs, rhs),
+            } => type_check_binary_op(lhs, rhs, context, BinaryOp::Gt, *span)?,
+            Expression {
+                span,
+                inner: ExpressionEnum::Lt(lhs, rhs),
+            } => type_check_binary_op(lhs, rhs, context, BinaryOp::Lt, *span)?,
+            Expression {
+                span,
+                inner: ExpressionEnum::Ge(lhs, rhs),
+            } => type_check_binary_op(lhs, rhs, context, BinaryOp::Ge, *span)?,
+            Expression {
+                span,
+                inner: ExpressionEnum::Le(lhs, rhs),
+            } => type_check_binary_op(lhs, rhs, context, BinaryOp::Le, *span)?,
         })
     }
 }
 
 // 因子は数値リテラル または 識別子 または () で囲まれた式、関数呼び出し のいずれかである
-fn factor<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
+fn factor<'src>(
+    input: LocatedSpan<&'src str>,
+) -> IResult<LocatedSpan<&'src str>, Expression<'src>> {
     alt((function_call, value, parens))(input)
 }
 
 // () で囲まれた式をパースする
-fn parens<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
+fn parens<'src>(
+    input: LocatedSpan<&'src str>,
+) -> IResult<LocatedSpan<&'src str>, Expression<'src>> {
     delimited(
         multispace0,
         delimited(tag("("), expr, tag(")")),
@@ -204,38 +326,47 @@ fn parens<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
 }
 
 // 浮動小数点数をパースする
-fn double_number<'src>(input: &'src str) -> IResult<&'src str, Value> {
+fn double_number<'src>(input: LocatedSpan<&'src str>) -> IResult<LocatedSpan<&'src str>, Value> {
     let (input, float) = delimited(multispace0, double, multispace0)(input)?;
     Ok((input, Value::F64(float)))
 }
 
 // 整数をパースする
-fn int_number<'src>(input: &'src str) -> IResult<&'src str, Value> {
+fn int_number<'src>(input: LocatedSpan<&'src str>) -> IResult<LocatedSpan<&'src str>, Value> {
     let (input, int) = delimited(
         multispace0,
         recognize(preceded(opt(tag("-")), digit1)),
         multispace0,
     )(input)?;
     let int = int
+        .to_string()
         .parse::<i64>()
         .expect(&format!("invalid integer: {int}"));
     Ok((input, Value::I64(int)))
 }
 
 // 数値式をパースする
-fn number_expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
+fn number_expr<'src>(
+    input: LocatedSpan<&'src str>,
+) -> IResult<LocatedSpan<&'src str>, Expression<'src>> {
     let (rest_double, double) = double_number(input)?;
     let (rest_int, int) = int_number(input)?;
-    let (input, value) = if rest_double == rest_int {
+    let (rest, value) = if rest_double == rest_int {
         (rest_int, int)
     } else {
         (rest_double, double)
     };
-    Ok((input, Expression::Value(value)))
+    Ok((
+        rest,
+        Expression::new(
+            helper::span_taken(input, rest),
+            ExpressionEnum::Value(value),
+        ),
+    ))
 }
 
 // 文字列リテラルをパースする
-fn string_literal<'src>(input: &'src str) -> IResult<&'src str, Value> {
+fn string_literal<'src>(input: LocatedSpan<&'src str>) -> IResult<LocatedSpan<&'src str>, Value> {
     let (input, _) = preceded(multispace0, tag("\""))(input)?;
     let (input, string) = many0(none_of("\""))(input)?;
     let (input, _) = terminated(tag("\""), multispace0)(input)?;
@@ -252,17 +383,25 @@ fn string_literal<'src>(input: &'src str) -> IResult<&'src str, Value> {
 }
 
 // 文字列式をパースする
-fn string_expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
-    let (input, value) = string_literal(input)?;
-    Ok((input, Expression::Value(value)))
+fn string_expr<'src>(
+    input: LocatedSpan<&'src str>,
+) -> IResult<LocatedSpan<&'src str>, Expression<'src>> {
+    let (rest, value) = string_literal(input)?;
+    Ok((
+        rest,
+        Expression::new(
+            helper::span_taken(input, rest),
+            ExpressionEnum::Value(value),
+        ),
+    ))
 }
 
 // 真偽値をパースする
-fn boolean<'src>(input: &'src str) -> IResult<&'src str, Value> {
+fn boolean<'src>(input: LocatedSpan<&'src str>) -> IResult<LocatedSpan<&'src str>, Value> {
     let (input, value) = alt((tag("true"), tag("false")))(input)?;
-    let value = if value == "true" {
+    let value = if *value.fragment() == "true" {
         Value::Boolean(true)
-    } else if value == "false" {
+    } else if *value.fragment() == "false" {
         Value::Boolean(false)
     } else {
         unreachable!("invalid boolean literal: {value}")
@@ -271,13 +410,23 @@ fn boolean<'src>(input: &'src str) -> IResult<&'src str, Value> {
 }
 
 // 真偽値式をパースする
-fn boolean_expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
-    let (input, value) = boolean(input)?;
-    Ok((input, Expression::Value(value)))
+fn boolean_expr<'src>(
+    input: LocatedSpan<&'src str>,
+) -> IResult<LocatedSpan<&'src str>, Expression<'src>> {
+    let (rest, value) = boolean(input)?;
+    Ok((
+        rest,
+        Expression::new(
+            helper::span_taken(input, rest),
+            ExpressionEnum::Value(value),
+        ),
+    ))
 }
 
 // 識別子をパースする
-pub(crate) fn ident<'src>(input: &'src str) -> IResult<&'src str, Ident<'src>> {
+pub(crate) fn ident<'src>(
+    input: LocatedSpan<&'src str>,
+) -> IResult<LocatedSpan<&'src str>, Ident<'src>> {
     let (input, ident) = delimited(
         multispace0,
         recognize(pair(
@@ -286,61 +435,83 @@ pub(crate) fn ident<'src>(input: &'src str) -> IResult<&'src str, Ident<'src>> {
         )),
         multispace0,
     )(input)?;
-    Ok((input, Ident(ident)))
+    Ok((input, Ident(ident.fragment())))
 }
 
 // 識別子式をパースする
-fn ident_expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
-    let (input, ident) = ident(input)?;
-    Ok((input, Expression::Ident(ident)))
+fn ident_expr<'src>(
+    input: LocatedSpan<&'src str>,
+) -> IResult<LocatedSpan<&'src str>, Expression<'src>> {
+    let (rest, ident) = ident(input)?;
+    Ok((
+        rest,
+        Expression::new(
+            helper::span_taken(input, rest),
+            ExpressionEnum::Ident(ident),
+        ),
+    ))
 }
 
 // 値をパースする
-fn value<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
+fn value<'src>(input: LocatedSpan<&'src str>) -> IResult<LocatedSpan<&'src str>, Expression<'src>> {
     let (input, value) = alt((number_expr, string_expr, boolean_expr, ident_expr))(input)?;
     Ok((input, value))
 }
 
-pub fn expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
+pub fn expr<'src>(
+    input: LocatedSpan<&'src str>,
+) -> IResult<LocatedSpan<&'src str>, Expression<'src>> {
     alt((if_expr, comparison_expr, num_expr))(input)
 }
 
-fn if_expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
-    let (input, _) = delimited(multispace0, tag("if"), multispace1)(input)?;
-    let (input, cond) = expr(input)?;
-    let (input, _) = helper::open_brace(input)?;
-    let (input, then) = Statements::parse(input)?;
-    let (input, _) = helper::close_brace(input)?;
-    let (input, otherwise) = opt(preceded(
+fn if_expr<'src>(
+    input: LocatedSpan<&'src str>,
+) -> IResult<LocatedSpan<&'src str>, Expression<'src>> {
+    let (rest, _) = delimited(multispace0, tag("if"), multispace1)(input)?;
+    let (rest, cond) = expr(rest)?;
+    let (rest, _) = helper::open_brace(rest)?;
+    let (rest, then) = Statements::parse(rest)?;
+    let (rest, _) = helper::close_brace(rest)?;
+    let (rest, otherwise) = opt(preceded(
         delimited(multispace0, tag("else"), multispace0),
         delimited(helper::open_brace, Statements::parse, helper::close_brace),
-    ))(input)?;
+    ))(rest)?;
     Ok((
-        input,
-        Expression::If(Box::new(cond), Box::new(then), otherwise.map(Box::new)),
+        rest,
+        Expression::new(
+            helper::span_taken(input, rest),
+            ExpressionEnum::If(Box::new(cond), Box::new(then), otherwise.map(Box::new)),
+        ),
     ))
 }
 
-fn comparison_expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
-    let (input, lhs) = alt((if_expr, num_expr))(input)?;
-    let (input, op) = alt((tag(">="), tag("<="), tag(">"), tag("<"), tag("==")))(input)?;
-    let (input, rhs) = alt((if_expr, num_expr))(input)?;
+fn comparison_expr<'src>(
+    input: LocatedSpan<&'src str>,
+) -> IResult<LocatedSpan<&'src str>, Expression<'src>> {
+    let (rest, lhs) = alt((if_expr, num_expr))(input)?;
+    let (rest, op) = alt((tag(">="), tag("<="), tag(">"), tag("<"), tag("==")))(rest)?;
+    let (rest, rhs) = alt((if_expr, num_expr))(rest)?;
     Ok((
-        input,
-        match op {
-            ">" => Expression::Gt(Box::new(lhs), Box::new(rhs)),
-            "<" => Expression::Lt(Box::new(lhs), Box::new(rhs)),
-            ">=" => Expression::Ge(Box::new(lhs), Box::new(rhs)),
-            "<=" => Expression::Le(Box::new(lhs), Box::new(rhs)),
-            "==" => Expression::Eq(Box::new(lhs), Box::new(rhs)),
-            _ => unreachable!("invalid comparison operator"),
-        },
+        rest,
+        Expression::new(
+            helper::span_taken(input, rest),
+            match *op.fragment() {
+                ">" => ExpressionEnum::Gt(Box::new(lhs), Box::new(rhs)),
+                "<" => ExpressionEnum::Lt(Box::new(lhs), Box::new(rhs)),
+                ">=" => ExpressionEnum::Ge(Box::new(lhs), Box::new(rhs)),
+                "<=" => ExpressionEnum::Le(Box::new(lhs), Box::new(rhs)),
+                "==" => ExpressionEnum::Eq(Box::new(lhs), Box::new(rhs)),
+                _ => unreachable!("invalid comparison operator"),
+            },
+        ),
     ))
 }
 
 // 式（加算式）をパースする
-fn num_expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
-    let (input, lhs) = term(input)?;
+fn num_expr<'src>(
+    input: LocatedSpan<&'src str>,
+) -> IResult<LocatedSpan<&'src str>, Expression<'src>> {
+    let (rest, lhs) = term(input)?;
 
     fold_many0(
         pair(
@@ -348,17 +519,20 @@ fn num_expr<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
             term,
         ),
         move || lhs.clone(),
-        |lhs, (op, rhs)| match op {
-            "+" => Expression::Add(Box::new(lhs), Box::new(rhs)),
-            "-" => Expression::Sub(Box::new(lhs), Box::new(rhs)),
-            _ => unreachable!("Multiplicative operator is not allowed in additive expression"),
+        |lhs, (op, rhs)| {
+            let span = helper::span_taken(input, lhs.located_span());
+            match *op.fragment() {
+                "+" => Expression::new(span, ExpressionEnum::Add(Box::new(lhs), Box::new(rhs))),
+                "-" => Expression::new(span, ExpressionEnum::Sub(Box::new(lhs), Box::new(rhs))),
+                _ => unreachable!("Multiplicative operator is not allowed in additive expression"),
+            }
         },
-    )(input)
+    )(rest)
 }
 
 // 項（乗算式）をパースする
-fn term<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
-    let (input, lhs) = factor(input)?;
+fn term<'src>(input: LocatedSpan<&'src str>) -> IResult<LocatedSpan<&'src str>, Expression<'src>> {
+    let (rest, lhs) = factor(input)?;
 
     fold_many0(
         pair(
@@ -370,21 +544,26 @@ fn term<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
             factor,
         ),
         move || lhs.clone(),
-        |lhs, (op, rhs)| match op {
-            "*" => Expression::Mul(Box::new(lhs), Box::new(rhs)),
-            "/" => Expression::Div(Box::new(lhs), Box::new(rhs)),
-            "%" => Expression::Rem(Box::new(lhs), Box::new(rhs)),
-            // "^" => Expression::Pow(Box::new(lhs), Box::new(rhs)),
-            _ => unreachable!("invalid multiplicative operator"),
+        |lhs, (op, rhs)| {
+            let span = helper::span_taken(input, lhs.located_span());
+            match *op.fragment() {
+                "*" => Expression::new(span, ExpressionEnum::Mul(Box::new(lhs), Box::new(rhs))),
+                "/" => Expression::new(span, ExpressionEnum::Div(Box::new(lhs), Box::new(rhs))),
+                "%" => Expression::new(span, ExpressionEnum::Rem(Box::new(lhs), Box::new(rhs))),
+                // "^" => Expression::Pow(Box::new(lhs), Box::new(rhs)),
+                _ => unreachable!("invalid multiplicative operator"),
+            }
         },
-    )(input)
+    )(rest)
 }
 
 // 関数呼び出しをパースする
-fn function_call<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>> {
-    let (input, ident) = ident(input)?;
+fn function_call<'src>(
+    input: LocatedSpan<&'src str>,
+) -> IResult<LocatedSpan<&'src str>, Expression<'src>> {
+    let (rest, ident) = ident(input)?;
 
-    let (input, args) = delimited(
+    let (rest, args) = delimited(
         multispace0,
         delimited(
             tag("("),
@@ -396,7 +575,13 @@ fn function_call<'src>(input: &'src str) -> IResult<&'src str, Expression<'src>>
             tag(")"),
         ),
         multispace0,
-    )(input)?;
+    )(rest)?;
 
-    Ok((input, Expression::FnInvoke(ident, args)))
+    Ok((
+        rest,
+        Expression::new(
+            helper::span_taken(input, rest),
+            ExpressionEnum::FnInvoke(ident, args),
+        ),
+    ))
 }

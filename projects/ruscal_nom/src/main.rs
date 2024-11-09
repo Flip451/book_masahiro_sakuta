@@ -1,4 +1,5 @@
 use anyhow::Result;
+use nom_locate::LocatedSpan;
 use std::io::{self, Read};
 
 use ruscal_nom::{stack_frame::StackFrame, statement::Statements, type_check::TypeCheckContext};
@@ -7,7 +8,7 @@ fn main() -> Result<()> {
     let mut source = String::new();
     io::stdin().read_to_string(&mut source)?;
 
-    let statements = match Statements::parse(&source) {
+    let statements = match Statements::parse(LocatedSpan::new(&source)) {
         Ok((_, statements)) => statements,
         Err(e) => {
             eprintln!("parse error: {}", e);

@@ -104,7 +104,10 @@ pub(crate) fn unary_fn<'src>(f: impl Fn(f64) -> f64 + 'static) -> FnDef<'src> {
 // 二項関数を式の配列に対する関数に変換する関数
 pub(crate) fn binary_fn<'src>(f: impl Fn(f64, f64) -> f64 + 'static) -> FnDef<'src> {
     FnDef::Native(NativeFn {
-        params: &[(Ident("x"), TypeDeclare::F64), (Ident("y"), TypeDeclare::F64)],
+        params: &[
+            (Ident("x"), TypeDeclare::F64),
+            (Ident("y"), TypeDeclare::F64),
+        ],
         return_type: TypeDeclare::F64,
         function: Box::new(move |args| {
             let first_arg = args.first().expect("function missing the first argument");
@@ -171,8 +174,8 @@ pub(crate) fn as_boolean() -> FnDef<'static> {
         function: Box::new(|args| {
             let arg = args.first().expect("function missing argument");
             Value::Boolean(
-            arg.as_boolean()
-                .expect("value cannot be coerced to boolean"),
+                arg.as_boolean()
+                    .expect("value cannot be coerced to boolean"),
             )
         }),
     })
