@@ -198,7 +198,7 @@ impl<'src> Expression<'src> {
                 inner: ExpressionEnum::Ident(ident),
             } => context
                 .get_variable(ident)
-                .ok_or(TypeCheckError::UndefinedVariable(*span, ident.to_string()))?,
+                .ok_or(TypeCheckError::UndefinedVariable(*span, *ident))?,
             Expression {
                 span: _,
                 inner: ExpressionEnum::Value(Value::Boolean(_)),
@@ -229,7 +229,7 @@ impl<'src> Expression<'src> {
                     .collect::<Result<Vec<_>, _>>()?;
                 let func = context
                     .get_function(ident)
-                    .ok_or(TypeCheckError::UndefinedFunction(*span, ident.to_string()))?;
+                    .ok_or(TypeCheckError::UndefinedFunction(*span, *ident))?;
                 let params = func.params();
                 for pair in args_type.iter().zip_longest(params.iter()) {
                     match pair {

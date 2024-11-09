@@ -190,7 +190,7 @@ impl<'src> Statements<'src> {
                     let expr_type = expression.type_check(context)?;
                     let var_type = context
                         .get_variable(name)
-                        .ok_or(TypeCheckError::UndefinedVariable(*span, name.to_string()))?;
+                        .ok_or(TypeCheckError::UndefinedVariable(*span, *name))?;
                     var_type.coerce_type(&expr_type, *span)?;
                     TypeDeclare::EmptyTuple
                 }

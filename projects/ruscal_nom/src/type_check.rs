@@ -42,9 +42,9 @@ pub enum TypeCheckError<'src> {
     #[error("{0}: type mismatch. {1} cannot be assigned to {2}")]
     TypeMismatch(Span<'src>, TypeDeclare, TypeDeclare),
     #[error("{0}: undefined variable: {1:?}")]
-    UndefinedVariable(Span<'src>, String),
+    UndefinedVariable(Span<'src>, Ident<'src>),
     #[error("{0}: undefined function: {1:?}")]
-    UndefinedFunction(Span<'src>, String),
+    UndefinedFunction(Span<'src>, Ident<'src>),
     #[error("{0}: invalid binary operation: {1:?} is not defined between {2:?} and {3:?}")]
     InvalidBinaryOperation(Span<'src>, BinaryOp, TypeDeclare, TypeDeclare),
     #[error("{0}: invalid argument count")]
