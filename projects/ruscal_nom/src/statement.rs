@@ -13,7 +13,7 @@ use crate::{
     function::{FnDef, UserFn},
     helper,
     stack_frame::StackFrame,
-    type_check::{self, TypeDeclare},
+    type_check::{self, TypeCheckContext, TypeCheckError, TypeDeclare},
     value::Value,
 };
 
@@ -61,10 +61,6 @@ pub struct Statements<'src>(Vec<Statement<'src>>);
 impl<'src> Statements<'src> {
     pub fn parse(input: &'src str) -> IResult<&'src str, Statements<'src>> {
         let (input, statements) = many0(Statement::parse)(input)?;
-        for (i, statement) in statements.iter().enumerate() {
-            println!("{:?}: {:?}", i, statement);
-        }
-
         Ok((input, Statements(statements)))
     }
 
@@ -133,6 +129,66 @@ impl<'src> Statements<'src> {
             }
         }
         result
+    }
+
+    pub fn type_check(
+        &'src self,
+        context: &mut TypeCheckContext<'src>,
+    ) -> Result<TypeDeclare, TypeCheckError> {
+        let mut result = TypeDeclare::EmptyTuple;
+        for statement in self.0.iter() {
+            result = match statement {
+                Statement::VarDef(ident, type_declare, expression) => {
+                    let expr_type = expression.type_check(context)?;
+                    type_declare.coerce_type(&expr_type)?;
+                    context.insert_variable(*ident, expr_type);
+                    TypeDeclare::EmptyTuple
+                }
+                Statement::Assignment(ident, expression) => {
+                    let expr_type = expression.type_check(context)?;
+                    let var_type = context
+                        .get_variable(ident)
+                        .ok_or(TypeCheckError::UndefinedVariable(ident.to_string()))?;
+                    var_type.coerce_type(&expr_type)?;
+                    TypeDeclare::EmptyTuple
+                }
+                Statement::Expression(expression) => expression.type_check(context)?,
+                Statement::For {
+                    loop_var,
+                    start,
+                    end,
+                    body,
+                } => {
+                    let start_type = start.type_check(context)?;
+                    let end_type = end.type_check(context)?;
+                    start_type.coerce_type(&TypeDeclare::I64)?;
+                    end_type.coerce_type(&TypeDeclare::I64)?;
+                    context.insert_variable(*loop_var, TypeDeclare::I64);
+                    body.type_check(context)? // TODO: ループ内変数を削除する、 type_check の返り値を ControlFlow に置き換える
+                }
+                Statement::FnDef {
+                    name,
+                    params,
+                    return_type,
+                    body,
+                } => {
+                    let mut sub_context= TypeCheckContext::push(context);
+                    for (ident, type_declare) in params {
+                        sub_context.insert_variable(*ident, *type_declare);
+                    }
+                    let body_type = body.type_check(&mut sub_context).expect("type check error");
+                    body_type.coerce_type(&return_type)?;
+                    // コンテキストへの関数の代入
+                    let fn_def = FnDef::User(UserFn::new(&params[..], *return_type, &body));
+                    context.insert_function(*name, fn_def);
+                    TypeDeclare::EmptyTuple
+                }
+                Statement::Return(expression) => return expression.type_check(context),
+                Statement::Break => TypeDeclare::EmptyTuple,
+                Statement::Continue => TypeDeclare::EmptyTuple,
+            };
+        }
+        Ok(result)
     }
 }
 

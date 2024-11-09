@@ -12,31 +12,41 @@ use crate::{
 };
 
 #[derive(Debug, Error)]
-pub(crate) enum TypeCheckError<'src> {
+pub enum TypeCheckError {
     #[error("type mismatch. {0} cannot be assigned to {1}")]
     TypeMismatch(TypeDeclare, TypeDeclare),
     #[error("undefined variable: {0:?}")]
-    UndefinedVariable(Ident<'src>),
+    UndefinedVariable(String),
     #[error("undefined function: {0:?}")]
-    UndefinedFunction(Ident<'src>),
+    UndefinedFunction(String),
     #[error("invalid binary operation: {0:?} {1:?} {2:?}")]
     InvalidBinaryOperation(BinaryOp, TypeDeclare, TypeDeclare),
     #[error("invalid argument count")]
     InvalidArgumentCount,
+    #[error("invalid condition type")]
+    InvalidConditionType,
 }
 
-pub(crate) struct TypeCheckContext<'src> {
+pub struct TypeCheckContext<'src> {
     variables: HashMap<Ident<'src>, TypeDeclare>,
     functions: HashMap<Ident<'src>, FnDef<'src>>,
     parent: Option<&'src TypeCheckContext<'src>>,
 }
 
 impl<'src> TypeCheckContext<'src> {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             variables: HashMap::new(),
             functions: HashMap::new(),
             parent: None,
+        }
+    }
+
+    pub(crate) fn push(context: &'src Self) -> TypeCheckContext<'src> {
+        Self {
+            variables: HashMap::new(),
+            functions: HashMap::new(),
+            parent: Some(context),
         }
     }
 
@@ -52,6 +62,14 @@ impl<'src> TypeCheckContext<'src> {
                 None => None,
             },
         }
+    }
+
+    pub(crate) fn insert_variable(&mut self, ident: Ident<'src>, type_declare: TypeDeclare) {
+        self.variables.insert(ident, type_declare);
+    }
+
+    pub(crate) fn insert_function(&mut self, ident: Ident<'src>, function: FnDef<'src>) {
+        self.functions.insert(ident, function);
     }
 }
 
@@ -75,7 +93,7 @@ impl TypeDeclare {
     pub(crate) fn coerce_type<'src>(
         &self,
         target: &TypeDeclare,
-    ) -> Result<TypeDeclare, TypeCheckError<'src>> {
+    ) -> Result<TypeDeclare, TypeCheckError> {
         use TypeDeclare::*;
         Ok(match (self, target) {
             (Any, _) => *target,
@@ -109,7 +127,7 @@ impl TypeDeclare {
     }
 }
 
-pub(crate) enum BinaryOp {
+pub enum BinaryOp {
     Add,
     Sub,
     Mul,
@@ -145,11 +163,11 @@ impl std::fmt::Debug for BinaryOp {
 }
 
 pub(crate) fn type_check_binary_op<'src>(
-    lhs: &Expression<'src>,
-    rhs: &Expression<'src>,
+    lhs: &'src Expression<'src>,
+    rhs: &'src Expression<'src>,
     context: &mut TypeCheckContext<'src>,
     op: BinaryOp,
-) -> Result<TypeDeclare, TypeCheckError<'src>> {
+) -> Result<TypeDeclare, TypeCheckError> {
     use BinaryOp::*;
     use TypeDeclare::*;
     let lhs_type = lhs.type_check(context)?;

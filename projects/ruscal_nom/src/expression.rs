@@ -26,6 +26,12 @@ use itertools::Itertools;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Ident<'src>(pub(crate) &'src str);
 
+impl<'src> ToString for Ident<'src> {
+    fn to_string(&self) -> String {
+        self.0.to_string()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression<'src> {
     Ident(Ident<'src>),
@@ -121,13 +127,13 @@ impl<'src> Expression<'src> {
     }
 
     pub(crate) fn type_check(
-        &self,
+        &'src self,
         context: &mut TypeCheckContext<'src>,
-    ) -> Result<TypeDeclare, TypeCheckError<'src>> {
+    ) -> Result<TypeDeclare, TypeCheckError> {
         Ok(match &self {
             Expression::Ident(ident) => context
                 .get_variable(ident)
-                .ok_or(TypeCheckError::UndefinedVariable(*ident))?,
+                .ok_or(TypeCheckError::UndefinedVariable(ident.to_string()))?,
             Expression::Value(Value::Boolean(_)) => TypeDeclare::Boolean,
             Expression::Value(Value::F64(_)) => TypeDeclare::F64,
             Expression::Value(Value::I64(_)) => TypeDeclare::I64,
@@ -140,7 +146,7 @@ impl<'src> Expression<'src> {
                     .collect::<Result<Vec<_>, _>>()?;
                 let func = context
                     .get_function(ident)
-                    .ok_or(TypeCheckError::UndefinedFunction(*ident))?;
+                    .ok_or(TypeCheckError::UndefinedFunction(ident.to_string()))?;
                 let params = func.params();
                 for pair in args_type.iter().zip_longest(params.iter()) {
                     match pair {
@@ -157,7 +163,19 @@ impl<'src> Expression<'src> {
                 }
                 func.return_type()
             }
-            Expression::If(condition, true_statements, false_statement) => todo!(),
+            Expression::If(condition, true_statements, false_statement) => {
+                let condition_type = condition.type_check(context)?;
+                if condition_type != TypeDeclare::Boolean {
+                    return Err(TypeCheckError::InvalidConditionType);
+                }
+                let true_type = true_statements.type_check(context)?;
+                if let Some(false_statements) = false_statement {
+                    let false_type = false_statements.type_check(context)?;
+                    true_type.coerce_type(&false_type)?
+                } else {
+                    true_type
+                }
+            }
             Expression::Add(lhs, rhs) => type_check_binary_op(lhs, rhs, context, BinaryOp::Add)?,
             Expression::Sub(lhs, rhs) => type_check_binary_op(lhs, rhs, context, BinaryOp::Sub)?,
             Expression::Mul(lhs, rhs) => type_check_binary_op(lhs, rhs, context, BinaryOp::Mul)?,
