@@ -117,7 +117,20 @@ pub(crate) fn binary_fn<'src>(f: impl Fn(f64, f64) -> f64 + 'static) -> FnDef<'s
     })
 }
 
-// 標準出力に値を出力する関数
+// 標準出力に値を出力する関数（改行なし）
+fn puts_raw(args: &[Value]) -> Value {
+    print!("{}", args[0]);
+    Value::EmptyTuple
+}
+
+pub(crate) fn puts() -> FnDef<'static> {
+    FnDef::Native(NativeFn {
+        params: &[(Ident("x"), TypeDeclare::Any)],
+        return_type: TypeDeclare::EmptyTuple,
+        function: Box::new(puts_raw),
+    })
+}
+
 fn print_raw(args: &[Value]) -> Value {
     println!("print: {}", args[0]);
     Value::EmptyTuple
@@ -196,6 +209,7 @@ pub(crate) fn standard_functions() -> HashMap<Ident<'static>, FnDef<'static>> {
     let mut functions = HashMap::new();
 
     // 標準出力用の関数
+    functions.insert(Ident("puts"), puts());
     functions.insert(Ident("print"), print());
     functions.insert(Ident("dbg"), print_dbg());
 
