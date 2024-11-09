@@ -21,7 +21,7 @@ print(a + b);
 let c: i64 = 5;
 print(pow((a + b + c), 2));
 
-if c {
+if c > 0 {
     print(a);
 } else {
     print(b);
@@ -56,11 +56,6 @@ fn process() -> i64 {
 print(process());
 
 let c: i64 = 3;
-
-fn illegal(a: i64, b: i64) -> i64 {
-    add(a, b) + c;
-}
-
 
 fn early_return(a: i64, b: i64) -> i64 {
     if a < b {

@@ -176,7 +176,7 @@ impl<'src> Statements<'src> {
                     for (ident, type_declare) in params {
                         sub_context.insert_variable(*ident, *type_declare);
                     }
-                    let body_type = body.type_check(&mut sub_context).expect("type check error");
+                    let body_type = body.type_check(&mut sub_context)?;
                     body_type.coerce_type(&return_type)?;
                     // コンテキストへの関数の代入
                     let fn_def = FnDef::User(UserFn::new(&params[..], *return_type, &body));

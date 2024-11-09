@@ -1,11 +1,9 @@
-use std::{
-    error::Error,
-    io::{self, Read},
-};
+use anyhow::Result;
+use std::io::{self, Read};
 
 use ruscal_nom::{stack_frame::StackFrame, statement::Statements, type_check::TypeCheckContext};
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<()> {
     let mut source = String::new();
     io::stdin().read_to_string(&mut source)?;
 
@@ -21,7 +19,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut context = TypeCheckContext::new();
     if let Err(err) = statements.type_check(&mut context) {
-        eprintln!("type check error: {}", err);
+        eprintln!("Type check error: {}", err);
         return Ok(());
     }
 

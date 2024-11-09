@@ -59,7 +59,6 @@ impl<'src> Expression<'src> {
     pub(crate) fn eval(&'src self, stack_frame: &mut StackFrame<'src>) -> EvalResult {
         let result: Value = match self {
             Expression::Value(v) => v.clone(),
-            Expression::Ident(Ident("pi")) => Value::F64(std::f64::consts::PI),
             Expression::Ident(var) => stack_frame
                 .get_variable(*var)
                 .expect(&format!("variable {:?} not found", var)),

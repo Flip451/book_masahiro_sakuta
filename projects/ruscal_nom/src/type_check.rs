@@ -7,8 +7,7 @@ use nom::{
 use thiserror::Error;
 
 use crate::{
-    expression::{Expression, Ident},
-    function::FnDef,
+    constants, expression::{Expression, Ident}, function::{self, FnDef}
 };
 
 #[derive(Debug, Error)]
@@ -19,7 +18,7 @@ pub enum TypeCheckError {
     UndefinedVariable(String),
     #[error("undefined function: {0:?}")]
     UndefinedFunction(String),
-    #[error("invalid binary operation: {0:?} {1:?} {2:?}")]
+    #[error("invalid binary operation: {0:?} is not defined between {1:?} and {2:?}")]
     InvalidBinaryOperation(BinaryOp, TypeDeclare, TypeDeclare),
     #[error("invalid argument count")]
     InvalidArgumentCount,
@@ -36,8 +35,8 @@ pub struct TypeCheckContext<'src> {
 impl<'src> TypeCheckContext<'src> {
     pub fn new() -> Self {
         Self {
-            variables: HashMap::new(),
-            functions: HashMap::new(),
+            variables: constants::standard_constants_types(),
+            functions: function::standard_functions(),
             parent: None,
         }
     }
